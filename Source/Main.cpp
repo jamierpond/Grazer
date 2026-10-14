@@ -17,9 +17,7 @@
 #include <eacp/WebView/WebView/JsStringLiteral.h>
 #include <emberstore/AppDatabase.h>
 
-#if GRAZER_RUDDER
 #include <RudderClient.h>
-#endif
 
 #include <algorithm>
 #include <cstdio>
@@ -142,10 +140,9 @@ struct BrowserView final : View
 
     // Grazer's tabs are contexts in Rudder, the app switcher: a tab is a search
     // away from anywhere, and picking one lands here. Silent when Rudder isn't
-    // running; a no-op where the client isn't built.
+    // running.
     void setupRudder()
     {
-#if GRAZER_RUDDER
         rudder.emplace(rudder::protocol::Hello {"Grazer", "audio.pond.grazer", 0});
         rudder->onActivate = [this](const std::string& contextId)
         {
@@ -162,14 +159,12 @@ struct BrowserView final : View
                 if (auto* tab = findTab(*id))
                     showTab(*tab);
         };
-#endif
     }
 
     // Tabs change in bursts (a navigation is a start, a title, a finish), so
     // the push waits for the end of the event loop turn and goes once.
     void scheduleRudderPush()
     {
-#if GRAZER_RUDDER
         if (rudderPushPending)
             return;
 
@@ -180,10 +175,8 @@ struct BrowserView final : View
                 rudderPushPending = false;
                 pushTabsToRudder();
             });
-#endif
     }
 
-#if GRAZER_RUDDER
     static std::optional<std::int64_t> rudderTabId(const std::string& contextId)
     {
         try
@@ -219,7 +212,6 @@ struct BrowserView final : View
         pushedToRudder = contexts;
         rudder->pushContexts(std::move(contexts));
     }
-#endif
 
     Control::TabList buildTabList()
     {
@@ -896,14 +888,12 @@ struct BrowserView final : View
     WebViewBridge transport {paletteWeb};
     Threads::Timer previewTimer {[this] { handlePreviewTick(); }, 8};
 
-    // The CLI control plane. controlServer is last on purpose: it must be torn
-    // down before the bridge and api it dispatches into.
-#if GRAZER_RUDDER
     std::optional<rudder::RudderClient> rudder;
     std::vector<rudder::protocol::Context> pushedToRudder;
     bool rudderPushPending = false;
-#endif
 
+    // The CLI control plane. controlServer is last on purpose: it must be torn
+    // down before the bridge and api it dispatches into.
     Control::ControlApi controlApi;
     Miro::Bridge controlBridge;
     std::optional<IPC::RpcServer> controlServer;

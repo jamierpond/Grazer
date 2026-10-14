@@ -34,14 +34,12 @@ list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 # behaves exactly as before when Rudder isn't running. Work against a local
 # Rudder checkout with:
 #   cmake -B build -DCPM_Rudder_SOURCE=$HOME/projects/Rudder
-if (APPLE)
-    CPMAddPackage(
-            NAME Rudder
-            GITHUB_REPOSITORY jamierpond/Rudder
-            GIT_TAG main
-            OPTIONS "RUDDER_CLIENT_ONLY ON"
-    )
-endif ()
+CPMAddPackage(
+        NAME Rudder
+        GITHUB_REPOSITORY jamierpond/Rudder
+        GIT_TAG main
+        OPTIONS "RUDDER_CLIENT_ONLY ON"
+)
 
 # Grazer's browser logic (URL/omnibox parsing, places, history, session,
 # palette ranking) lives in a plain static library so it stays unit-testable
@@ -97,10 +95,7 @@ endif ()
 include(cmake/GrazerPasskeys.cmake)
 grazer_enable_passkeys(Grazer audio.pond.grazer)
 
-if (TARGET RudderClient)
-    target_link_libraries(Grazer PRIVATE RudderClient)
-    target_compile_definitions(Grazer PRIVATE GRAZER_RUDDER=1)
-endif ()
+target_link_libraries(Grazer PRIVATE RudderClient)
 
 if (NOT TARGET NanoTest)
     CPMAddPackage(
