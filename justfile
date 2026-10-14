@@ -17,6 +17,11 @@ build:
 run:
     node Scripts/run.mjs
 
+[macos]
+[doc('Build Release + install to /Applications/Wim.app, registered with LaunchServices')]
+install:
+    node Scripts/install-macos.mjs
+
 [doc('Delete the build directory')]
 clean:
     node Scripts/clean.mjs
