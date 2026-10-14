@@ -794,6 +794,12 @@ struct BrowserView final : View
     {
         auto options = embeddedOptions("GrazerGo");
         options.transparentBackground = true;
+
+        // The palette serves its UI from an embedded scheme the tabs don't
+        // register. WebView2 refuses a second scheme set in one user-data
+        // folder (ERROR_INVALID_STATE, and the palette never appears), so it
+        // gets a folder of its own. No-op on macOS.
+        options.userDataFolderSuffix = "Palette";
         return options;
     }
 
