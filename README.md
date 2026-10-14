@@ -4,7 +4,7 @@
 
 <h1 align="center">Grazer</h1>
 
-<p align="center"><b>A keyboard-first browser for macOS. Vim keys, one fuzzy palette, real WebKit.</b></p>
+<p align="center"><b>A keyboard-first browser for macOS and Windows: Vim keys, one fuzzy palette, the native web engine.</b></p>
 
 No tab strip, no address bar. `o` opens a palette that fuzzy-searches your open
 tabs, saved places and history, and previews tabs live as you move through
@@ -34,7 +34,9 @@ In the palette: `^J`/`^K` move, `Enter` goes, `Esc` returns to where you were,
 
 ## Build
 
-Needs CMake 3.31+, Ninja, Node.js and [just](https://github.com/casey/just).
+Needs CMake 3.31+, Node.js and [just](https://github.com/casey/just), plus
+Ninja and the Xcode tools on macOS or Visual Studio on Windows. The same
+`just` recipes work on both.
 
 ```sh
 just run       # build and launch
