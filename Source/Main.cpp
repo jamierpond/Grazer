@@ -13,6 +13,7 @@
 #include "Types.h"
 #include "Url.h"
 
+#include <eacp/Core/Platform/Platform.h>
 #include <eacp/Network/IPC/Lock.h>
 #include <eacp/Network/IPCRpc/RpcClient.h>
 #include <eacp/Network/IPCRpc/RpcServer.h>
@@ -279,11 +280,12 @@ struct BrowserView final : View
     //
     // NOTE: root-level child coordinates are currently unflipped on macOS
     // (same as eacp's own Browser example), so the VISUAL top band is
-    // removeFromBottom here.
+    // removeFromBottom there. Windows lays out y-down.
     void resized() override
     {
         auto bounds = getLocalBounds();
-        chromeBar.setBounds(bounds.removeFromBottom(chromeBarHeight));
+        chromeBar.setBounds(Platform::isMac() ? bounds.removeFromBottom(chromeBarHeight)
+                                              : bounds.removeFromTop(chromeBarHeight));
         content.setBounds(bounds);
 
         if (activeTab != nullptr)
