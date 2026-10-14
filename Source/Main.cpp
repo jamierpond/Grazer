@@ -1,3 +1,5 @@
+#include "AppMenu.h"
+#include "BrowserEngine.h"
 #include "Console.h"
 #include "Control.h"
 #include "ErrorPage.h"
@@ -23,7 +25,6 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
 #include <optional>
 #include <string>
 #include <utility>
@@ -418,17 +419,10 @@ struct BrowserView final : View
             return true;
         };
 
-        view.onDownloadFinished = [this, t](const std::string& path)
-        {
-            auto name = std::filesystem::path(path).filename().string();
-            showToast(activeTab != nullptr ? *activeTab : *t, "Downloaded " + name);
-        };
-
-        view.onDownloadFailed = [this, t](const std::string& error)
-        {
-            showToast(activeTab != nullptr ? *activeTab : *t,
-                      "Download failed: " + error);
-        };
+        BrowserEngine::reportDownloads(
+            view,
+            [this, t](const std::string& message)
+            { showToast(activeTab != nullptr ? *activeTab : *t, message); });
 
         view.onClose = [this, t] { Threads::callAsync([this, t] { closeTab(t); }); };
     }
@@ -792,15 +786,7 @@ struct BrowserView final : View
     {
         auto options = WebView::Options();
         options.statusBar = false;
-
-        // The engine tail Safari itself appends. WebKit derives the OS/WebKit
-        // prefix, so the UA reads as stock Safari and sites (Google sign-in
-        // especially) treat Grazer as a real browser, not an embedded web view.
-        options.applicationNameForUserAgent = "Version/26.0 Safari/605.1.15";
-
-        options.backForwardGestures = true;
-        options.allowsMagnification = true;
-        options.elementFullscreen = true;
+        BrowserEngine::configure(options);
         return options;
     }
 
@@ -904,7 +890,7 @@ struct GrazerApp
 {
     GrazerApp()
     {
-        setApplicationMenuBar(buildMenuBar());
+        AppMenu::install();
         view.onToggleMaximize = [this] { window.toggleMaximize(); };
         view.onActivateWindow = [this] { window.toFront(); };
         window.setContentView(view);
@@ -915,27 +901,6 @@ struct GrazerApp
         // launched Grazer waited in the queue for this window.
         OpenUrls::setHandler([this](const std::string& url)
                              { view.openUrlFromControl(url); });
-    }
-
-    // The Edit menu is load-bearing: macOS only delivers Cmd+X/C/V/A to the
-    // focused view (the palette input, page fields) by matching them against
-    // the menu bar -- without it, paste is dead everywhere.
-    static MenuBar buildMenuBar()
-    {
-        auto bar = MenuBar {};
-        bar.add(standardApplicationMenu("Grazer"));
-        bar.add(standardEditMenu());
-
-        auto viewMenu = Menu {"View"};
-        viewMenu.add(MenuItem::withAction(
-            "Zoom In", WebHelpers::zoomInFocusedWebView, commandKey("+")));
-        viewMenu.add(MenuItem::withAction(
-            "Zoom Out", WebHelpers::zoomOutFocusedWebView, commandKey("-")));
-        viewMenu.add(MenuItem::withAction(
-            "Actual Size", WebHelpers::resetSizedFocusedWebView, commandKey("0")));
-        bar.add(std::move(viewMenu));
-
-        return bar;
     }
 
     // Frameless chrome: the page runs edge to edge under a hidden, transparent

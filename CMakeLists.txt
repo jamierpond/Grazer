@@ -74,16 +74,21 @@ eacp_add_webview_app(Grazer
 
 target_link_libraries(Grazer PRIVATE GrazerBrowser)
 
-# Takes the URLs the OS hands Grazer -- kAEGetURL on macOS, the command line
-# on Windows (Source/OpenUrls.h) -- and gives the CLI modes a terminal to
-# print to (Source/Console.h).
+# The per-platform halves of the app, each beside the shared header it
+# implements: the menu bar (AppMenu), what makes a web view a browser's
+# (BrowserEngine), a terminal for the CLI modes (Console), and the URLs the OS
+# hands Grazer -- kAEGetURL on macOS, the command line on Windows (OpenUrls).
 if (APPLE)
     enable_language(OBJCXX)
     target_sources(Grazer PRIVATE
+            Source/AppMenu-macOS.mm
+            Source/BrowserEngine-macOS.mm
             Source/Console-macOS.mm
             Source/OpenUrls-macOS.mm)
 elseif (WIN32)
     target_sources(Grazer PRIVATE
+            Source/AppMenu-Windows.cpp
+            Source/BrowserEngine-Windows.cpp
             Source/Console-Windows.cpp
             Source/OpenUrls-Windows.cpp)
 endif ()
