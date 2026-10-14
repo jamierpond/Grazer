@@ -3,18 +3,24 @@
 // fetch and check out the branch's new head; nothing is built, so a running
 // dev Grazer isn't touched. The next `just build` / `just run` compiles it.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { ROOT, cpmSourceArgs, main, run } from './lib.mjs';
 
 await main(async () => {
   // Only trees configured from this checkout: a tree left over from before a
-  // move (or from another worktree) won't reconfigure here.
+  // move (or from another worktree) won't reconfigure here. Compared as paths,
+  // not text: on Windows CMake writes C:/... where ROOT reads C:\...
+  const key = 'CMAKE_HOME_DIRECTORY:INTERNAL=';
+  const canonical = (path) =>
+    process.platform === 'win32' ? resolve(path).toLowerCase() : resolve(path);
+
   const ownTree = (name) => {
     const cache = join(ROOT, name, 'CMakeCache.txt');
     return existsSync(cache)
       && readFileSync(cache, 'utf8')
-        .split('\n')
-        .some((line) => line === `CMAKE_HOME_DIRECTORY:INTERNAL=${ROOT}`);
+        .split(/\r?\n/)
+        .some((line) => line.startsWith(key)
+          && canonical(line.slice(key.length)) === canonical(ROOT));
   };
 
   const trees = readdirSync(ROOT)
