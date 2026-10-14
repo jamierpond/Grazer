@@ -27,25 +27,40 @@ function bundleId(app) {
 
 // Gracefully quit (a quit Apple event, like Cmd+Q) whatever runs from APP,
 // found by its bundle id. Returns whether one was running.
-function quitInstalled() {
+async function quitInstalled() {
   if (!existsSync(APP))
     return false;
 
   const script = `
     ObjC.import('AppKit');
-    const apps = ObjC.unwrap($.NSRunningApplication
+    ObjC.unwrap($.NSRunningApplication
       .runningApplicationsWithBundleIdentifier(${JSON.stringify(bundleId(APP))}))
-      .filter((app) => ObjC.unwrap(app.bundleURL.path) === ${JSON.stringify(APP)});
-    apps.forEach((app) => app.terminate);
-    for (let i = 0; i < 100 && apps.some((app) => !app.terminated); ++i)
-      delay(0.1);
-    if (apps.some((app) => !app.terminated))
-      throw new Error('Wim did not quit');
-    apps.length > 0;
+      .filter((app) => ObjC.unwrap(app.bundleURL.path) === ${JSON.stringify(APP)})
+      .map((app) => { app.terminate; return app.processIdentifier; })
+      .join(' ');
   `;
 
-  return execFileSync('osascript', ['-l', 'JavaScript', '-e', script],
-    { encoding: 'utf8' }).trim() === 'true';
+  const pids = execFileSync('osascript', ['-l', 'JavaScript', '-e', script],
+    { encoding: 'utf8' }).trim().split(' ').filter(Boolean).map(Number);
+
+  // osascript has no run loop to see NSRunningApplication.terminated flip,
+  // so wait on the pids here.
+  const alive = (pid) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  for (let i = 0; i < 100 && pids.some(alive); ++i)
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+  if (pids.some(alive))
+    throw new Error('Wim did not quit');
+
+  return pids.length > 0;
 }
 
 await main(async () => {
@@ -66,7 +81,7 @@ await main(async () => {
   await run('codesign', ['--force', '--sign', '-', STAGING]);
   await run('codesign', ['--verify', '--deep', '--strict', STAGING]);
 
-  const wasRunning = quitInstalled();
+  const wasRunning = await quitInstalled();
 
   await rm(OLD, { recursive: true, force: true });
 
