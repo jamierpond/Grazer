@@ -909,9 +909,9 @@ struct GrazerApp
         window.setContentView(view);
         window.toggleMaximize();
 
-        // URLs from macOS (a link opened with Grazer, `open -b audio.pond.grazer`)
-        // open as new tabs, like `--open-url`; ones that launched Grazer waited
-        // in the queue for this window.
+        // URLs from the OS (a link opened with Grazer, `open -b audio.pond.grazer`,
+        // `Grazer.exe <url>`) open as new tabs, like `--open-url`; ones that
+        // launched Grazer waited in the queue for this window.
         OpenUrls::setHandler([this](const std::string& url)
                              { view.openUrlFromControl(url); });
     }
@@ -1165,8 +1165,8 @@ struct ControlClientApp
         // of the Dock and the app switcher.
         eacp::Apps::setDockIconVisible(false);
 
-        // A duplicate launch may carry URLs from macOS, which only land once
-        // launching finishes; see forwardUrls.
+        // A duplicate launch may carry URLs from the OS, which on macOS only
+        // land once launching finishes; see forwardUrls.
         client.onConnected = [this]
         {
             connected = true;
@@ -1230,8 +1230,9 @@ struct ControlClientApp
         }
     }
 
-    // A duplicate launch macOS started with URLs (`open -n`, a second copy of
-    // the bundle): open them in the running Grazer instead of just raising it.
+    // A duplicate launch the OS started with URLs (`open -n`, a second copy of
+    // the bundle, `Grazer.exe <url>`): open them in the running Grazer instead
+    // of just raising it.
     void forwardUrls(const std::vector<std::string>& urls)
     {
         unanswered = urls.size();
@@ -1327,7 +1328,7 @@ int main(int argc, char* argv[])
         return Apps::run<ControlClientApp>();
     }
 
-    // Plain launch, maybe carrying URLs from macOS -- start catching them
+    // Plain launch, maybe carrying URLs from the OS -- start catching them
     // before the loop runs, whichever instance ends up opening them.
     OpenUrls::listen();
 
