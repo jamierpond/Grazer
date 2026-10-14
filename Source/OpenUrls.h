@@ -27,11 +27,16 @@ void setHandler(Handler handler);
 // The URLs received so far with no handler set, removing them from the queue.
 std::vector<std::string> takePending();
 
+// Run `callback` once launching is done -- by then any URL the app was
+// launched with has arrived. Eacp's first loop ticks can run before that.
+void afterLaunch(std::function<void()> callback);
+
 #else
 
 inline void listen() {}
 inline void setHandler(Handler) {}
 inline std::vector<std::string> takePending() { return {}; }
+inline void afterLaunch(std::function<void()> callback) { callback(); }
 
 #endif
 

@@ -1018,10 +1018,16 @@ struct ControlClientApp
         // of the Dock and the app switcher.
         eacp::Apps::setDockIconVisible(false);
 
+        // A duplicate launch may carry URLs from macOS, which only land once
+        // launching finishes; see forwardUrls.
         client.onConnected = [this]
         {
             connected = true;
-            dispatch();
+
+            if (pendingRequest->kind == ControlKind::Reactivate)
+                OpenUrls::afterLaunch([this] { dispatch(); });
+            else
+                dispatch();
         };
 
         client.onDisconnected = [this]

@@ -10,6 +10,8 @@ namespace
 {
 Handler handler;
 std::vector<std::string> pending;
+bool launched = false;
+std::vector<std::function<void()>> launchCallbacks;
 
 void receive(std::string url)
 {
@@ -59,6 +61,17 @@ void listen()
                         forEventClass:kInternetEventClass
                            andEventID:kAEGetURL];
                 }];
+
+    [[NSNotificationCenter defaultCenter]
+        addObserverForName:NSApplicationDidFinishLaunchingNotification
+                    object:nil
+                     queue:nil
+                usingBlock:^(NSNotification*) {
+                  launched = true;
+
+                  for (auto& callback: std::exchange(launchCallbacks, {}))
+                      callback();
+                }];
 }
 
 void setHandler(Handler handlerToUse)
@@ -72,6 +85,14 @@ void setHandler(Handler handlerToUse)
 std::vector<std::string> takePending()
 {
     return std::exchange(pending, {});
+}
+
+void afterLaunch(std::function<void()> callback)
+{
+    if (launched)
+        callback();
+    else
+        launchCallbacks.push_back(std::move(callback));
 }
 
 } // namespace OpenUrls
