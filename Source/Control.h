@@ -16,8 +16,8 @@
 namespace Control
 {
 
-inline constexpr auto lockName = "com.pond.wim";
-inline constexpr auto channelName = "com.pond.wim.control";
+inline constexpr auto lockName = "audio.pond.wim";
+inline constexpr auto channelName = "audio.pond.wim.control";
 
 // One open tab, as reported to the CLI. `title` falls back to the URL before
 // a page has named itself, mirroring how the Go palette renders a fresh tab.

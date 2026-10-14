@@ -136,7 +136,7 @@ struct BrowserView final : View
     void setupRudder()
     {
 #if WIM_RUDDER
-        rudder.emplace(rudder::protocol::Hello {"Wim", "com.pond.wim", 0});
+        rudder.emplace(rudder::protocol::Hello {"Wim", "audio.pond.wim", 0});
         rudder->onActivate = [this](const std::string& contextId)
         {
             try

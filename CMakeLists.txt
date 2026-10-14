@@ -69,7 +69,7 @@ eacp_add_webview_app(Wim
         API_HEADER  ${CMAKE_CURRENT_SOURCE_DIR}/Source/Types.h
         WEB_DIR     ${CMAKE_CURRENT_SOURCE_DIR}/web
         CATEGORY    WimGo
-        BUNDLE_ID   com.pond.wim
+        BUNDLE_ID   audio.pond.wim
         BUNDLE_NAME "Wim"
         REACT)
 
