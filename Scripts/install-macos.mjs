@@ -81,8 +81,9 @@ await main(async () => {
   for (const dir of readdirSync(ROOT).filter((name) => name.startsWith('build'))) {
     const dev = join(ROOT, dir, 'Wim.app');
 
+    // Fails (-10814) for a bundle LaunchServices never saw; that's fine.
     if (existsSync(dev))
-      await run(LSREGISTER, ['-u', dev]);
+      await run(LSREGISTER, ['-u', dev], { stdio: 'ignore' }).catch(() => {});
   }
 
   if (wasRunning)
