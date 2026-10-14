@@ -231,6 +231,11 @@ struct BrowserView final : View
         if (text.empty())
             return {false, "no url given"};
 
+        // An open palette would preview its selection right back over the
+        // new tab.
+        if (paletteOpen)
+            hidePalette();
+
         openTab(navigationURL(text));
         onActivateWindow();
         return {true, ""};
