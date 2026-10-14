@@ -2,6 +2,7 @@
 #include "ErrorPage.h"
 #include "History.h"
 #include "Mru.h"
+#include "OpenUrls.h"
 #include "PageScript.h"
 #include "Palette.h"
 #include "Places.h"
@@ -860,6 +861,12 @@ struct WimApp
         view.onActivateWindow = [this] { window.toFront(); };
         window.setContentView(view);
         window.toggleMaximize();
+
+        // URLs from macOS (a link opened with Wim, `open -b audio.pond.wim`)
+        // open as new tabs, like `--open-url`; ones that launched Wim waited
+        // in the queue for this window.
+        OpenUrls::setHandler([this](const std::string& url)
+                             { view.openUrlFromControl(url); });
     }
 
     // The Edit menu is load-bearing: macOS only delivers Cmd+X/C/V/A to the
@@ -1052,11 +1059,35 @@ struct ControlClientApp
                 break;
 
             case ControlKind::Reactivate:
+                if (auto urls = OpenUrls::takePending(); !urls.empty())
+                {
+                    forwardUrls(urls);
+                    break;
+                }
+
                 client.call<Control::Ack>("reactivate")
                     .then([this](Control::Ack) { finish(0); },
                           [this](const std::string&) { finish(0); });
                 break;
         }
+    }
+
+    // A duplicate launch macOS started with URLs (`open -n`, a second copy of
+    // the bundle): open them in the running Wim instead of just raising it.
+    void forwardUrls(const std::vector<std::string>& urls)
+    {
+        unanswered = urls.size();
+
+        for (auto& url: urls)
+            client.call<Control::Ack>("openUrl", Control::UrlRef {url})
+                .then([this](Control::Ack) { answered(); },
+                      [this](const std::string&) { answered(); });
+    }
+
+    void answered()
+    {
+        if (--unanswered == 0)
+            finish(0);
     }
 
     // id, active marker, title, url -- tab-separated so `cut -f1` yields the id
@@ -1102,6 +1133,7 @@ struct ControlClientApp
 
     bool connected = false;
     bool settled = false;
+    std::size_t unanswered = 0;
     eacp::IPC::RpcClient client {Control::channelName, eacp::Time::MS {4000}};
 };
 
@@ -1119,7 +1151,11 @@ int main(int argc, char* argv[])
         return Apps::run<ControlClientApp>();
     }
 
-    // Plain launch. Hold the per-user singleton for the whole process; the
+    // Plain launch, maybe carrying URLs from macOS -- start catching them
+    // before the loop runs, whichever instance ends up opening them.
+    OpenUrls::listen();
+
+    // Hold the per-user singleton for the whole process; the
     // static locals outlive Apps::run, so the lock is released only at exit
     // (or by the kernel on a crash). Losing it means another Wim already owns
     // the window -- raise that one and go, don't open a second.
