@@ -17,8 +17,16 @@ build:
 run:
     node Scripts/run.mjs
 
+[doc('Build + run the unit tests in build-test/ (leaves build/ alone)')]
+test:
+    node Scripts/test.mjs
+
+[doc('Refetch branch-pinned deps (Rudder@main) in every build tree; builds nothing')]
+update-deps:
+    node Scripts/update-deps.mjs
+
 [macos]
-[doc('Build Release + install to /Applications/Grazer.app, registered with LaunchServices')]
+[doc('Build Release (latest Rudder) + install to /Applications/Grazer.app; removes the old Wim.app')]
 install:
     node Scripts/install-macos.mjs
 
