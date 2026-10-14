@@ -1,3 +1,4 @@
+#include "Console.h"
 #include "Control.h"
 #include "ErrorPage.h"
 #include "History.h"
@@ -1301,6 +1302,10 @@ int main(int argc, char* argv[])
     using namespace eacp;
 
     Apps::setCommandLineArgs(argc, argv);
+
+    // Every mode below but a plain launch prints, if only an error.
+    if (argc > 1 && std::string {argv[1]}.starts_with("--"))
+        Console::attachToParent();
 
     if (argc >= 4 && std::string {argv[1]} == "--snapshot")
     {

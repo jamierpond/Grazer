@@ -75,12 +75,17 @@ eacp_add_webview_app(Grazer
 target_link_libraries(Grazer PRIVATE GrazerBrowser)
 
 # Takes the URLs the OS hands Grazer -- kAEGetURL on macOS, the command line
-# on Windows; see Source/OpenUrls.h.
+# on Windows (Source/OpenUrls.h) -- and gives the CLI modes a terminal to
+# print to (Source/Console.h).
 if (APPLE)
     enable_language(OBJCXX)
-    target_sources(Grazer PRIVATE Source/OpenUrls-macOS.mm)
+    target_sources(Grazer PRIVATE
+            Source/Console-macOS.mm
+            Source/OpenUrls-macOS.mm)
 elseif (WIN32)
-    target_sources(Grazer PRIVATE Source/OpenUrls-Windows.cpp)
+    target_sources(Grazer PRIVATE
+            Source/Console-Windows.cpp
+            Source/OpenUrls-Windows.cpp)
 endif ()
 
 # The at-rest icon Finder, the Dock and Explorer draw. Assets/Icon is made by
