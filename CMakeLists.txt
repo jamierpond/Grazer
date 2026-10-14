@@ -75,6 +75,10 @@ eacp_add_webview_app(Wim
 
 target_link_libraries(Wim PRIVATE WimBrowser)
 
+# The at-rest icon Finder and the Dock draw. Wim.icns is generated from
+# Assets/Icon/wim-icon.svg by `just icon` and committed.
+eacp_set_app_icon(Wim ICNS ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Icon/Wim.icns)
+
 if (TARGET RudderClient)
     target_link_libraries(Wim PRIVATE RudderClient)
     target_compile_definitions(Wim PRIVATE WIM_RUDDER=1)
