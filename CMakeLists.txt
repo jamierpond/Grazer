@@ -59,8 +59,9 @@ add_library(WimBrowser STATIC
 target_include_directories(WimBrowser PUBLIC Lib/Browser Source)
 target_link_libraries(WimBrowser PUBLIC emberstore)
 
-# eacp only sets its bundle plist template when built top-level.
-set(EACP_MACOS_PLIST "${eacp_SOURCE_DIR}/CMake/macOSBundleInfo.plist.in"
+# eacp's bundle plist template plus http/https URL types, so Wim can be
+# picked as the default browser and gets the URLs macOS opens with it.
+set(EACP_MACOS_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/macOSBundleInfo.plist.in"
         CACHE INTERNAL "eacp macOS bundle Info.plist template")
 
 eacp_add_webview_app(Wim
