@@ -24,3 +24,7 @@ clean:
 [doc('Run the palette UI vite dev server (configure with -DEACP_WEBVIEW_DEV=ON)')]
 web-dev:
     node Scripts/web-dev.mjs
+
+[doc('Rebuild Assets/Icon/Wim.icns from wim-icon.svg (needs ImageMagick + librsvg)')]
+icon:
+    node Scripts/icon.mjs
