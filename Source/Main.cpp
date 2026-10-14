@@ -978,7 +978,7 @@ struct GrazerApp
 
 // --- Snapshot ------------------------------------------------------------------
 
-// `Grazer --snapshot <out.png> [--palette] <url>...`: open the URLs as tabs (the
+// `Grazer --snapshot <out.png> [--palette] [--js <script>] <url>...`: open the URLs as tabs (the
 // last one in front) in a 1400x900 window, wait for every page to load and
 // settle, optionally open the palette over it, and save the window's own
 // rendering -- chrome bar, page and palette web views -- as a PNG. Real Grazer
@@ -989,6 +989,7 @@ struct SnapshotRequest
 {
     std::string output;
     std::vector<std::string> urls;
+    std::string script;
     bool palette = false;
 };
 
@@ -1027,6 +1028,25 @@ struct SnapshotApp
             if (tab->view().isLoading())
                 return;
 
+        // --js: run once every tab has loaded, then the settle wait starts
+        // over -- e.g. hide a donation banner that isn't Grazer's to show.
+        if (!snapshotRequest.script.empty() && !scriptRan)
+        {
+            scriptRan = true;
+            settledTicks = 0;
+
+            for (auto& tab: view.tabs)
+                tab->view().evaluateJavaScript(
+                    snapshotRequest.script,
+                    [](const std::string& result, const std::string& error)
+                    {
+                        if (!result.empty() || !error.empty())
+                            std::fprintf(stderr, "grazer: --js: %s%s\n",
+                                         result.c_str(), error.c_str());
+                    });
+            return;
+        }
+
         if (++settledTicks < 12)
             return;
 
@@ -1056,6 +1076,7 @@ struct SnapshotApp
     BrowserView view;
     Window window {getOptions()};
     int settledTicks = 0;
+    bool scriptRan = false;
     bool capturing = false;
     Threads::Timer timer {[this] { tick(); }, 4};
 };
@@ -1299,6 +1320,8 @@ int main(int argc, char* argv[])
         {
             if (std::string {argv[i]} == "--palette")
                 snapshotRequest.palette = true;
+            else if (std::string {argv[i]} == "--js" && i + 1 < argc)
+                snapshotRequest.script = argv[++i];
             else
                 snapshotRequest.urls.emplace_back(argv[i]);
         }
