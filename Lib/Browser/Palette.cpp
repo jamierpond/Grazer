@@ -144,4 +144,9 @@ GoItem searchRow(const std::string& query)
     row.isSearch = true;
     return row;
 }
+
+std::string completionText(const GoItem& item, const std::string& query)
+{
+    return item.isSearch ? query : item.url;
+}
 } // namespace grazer

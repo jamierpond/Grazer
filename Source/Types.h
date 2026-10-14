@@ -75,6 +75,7 @@ public:
                    &T::setQuery,
                    &T::moveSelection,
                    &T::activate,
+                   &T::complete,
                    &T::choose,
                    &T::cancel,
                    &T::closeItem,
@@ -87,6 +88,7 @@ public:
     void setQuery(const GoQuery& query) { onSetQuery(query.text); }
     void moveSelection(const GoDelta& delta) { onMoveSelection((int) delta.delta); }
     void activate() { onActivate(); }
+    GoQuery complete() { return {onComplete()}; }
     void choose(const GoItem& item) { onChoose(item); }
     void cancel() { onCancel(); }
     void closeItem(const GoItem& item) { onCloseItem(item); }
@@ -97,6 +99,7 @@ public:
     std::function<void(const std::string&)> onSetQuery = [](auto&) {};
     std::function<void(int)> onMoveSelection = [](int) {};
     std::function<void()> onActivate = [] {};
+    std::function<std::string()> onComplete = [] { return std::string {}; };
     std::function<void(const GoItem&)> onChoose = [](auto&) {};
     std::function<void()> onCancel = [] {};
     std::function<void(const GoItem&)> onCloseItem = [](auto&) {};

@@ -21,7 +21,8 @@ them. Everything else is a key away.
 | `/` `n` `N` | Find | `r` | Reload |
 
 In the palette: `^J`/`^K` move, `Enter` goes, `Esc` returns to where you were,
-`^S` saves a place, `^X` closes or forgets.
+`Tab` (or `→` at the end) takes the row's URL to edit, `^S` saves a place,
+`^X` closes or forgets.
 
 ## Also
 

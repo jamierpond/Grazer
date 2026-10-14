@@ -52,6 +52,22 @@ export default function App() {
             e.preventDefault();
             const item = results.items[results.selected];
             if (item && !item.isSearch) void backend.closeItem(item);
+        } else if (
+            e.key === 'Tab' ||
+            (e.key === 'ArrowRight' &&
+                inputRef.current?.selectionStart === query.length &&
+                inputRef.current?.selectionEnd === query.length)
+        ) {
+            // Take the selected row's URL into the input to keep typing; the
+            // native query follows, so Enter opens what's typed.
+            e.preventDefault();
+            void backend.complete().then(({ text }) => {
+                if (!text) return;
+                setQuery(text);
+                requestAnimationFrame(() =>
+                    inputRef.current?.setSelectionRange(text.length, text.length),
+                );
+            });
         } else if (e.key === 'Enter') {
             e.preventDefault();
             void backend.activate();

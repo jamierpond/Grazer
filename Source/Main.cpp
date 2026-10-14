@@ -65,6 +65,7 @@ struct BrowserView final : View
         api.onMoveSelection = [this](int delta) { movePaletteSelection(delta); };
         api.onActivate = [this]
         { Threads::callAsync([this] { activatePalette(); }); };
+        api.onComplete = [this] { return completePalette(); };
         api.onChoose = [this](const GoItem& item)
         {
             auto chosen = item;
@@ -568,6 +569,18 @@ struct BrowserView final : View
         refilterPalette();
         publishResults();
         previewDirty = true;
+    }
+
+    // Tab / →: the selected row's URL becomes the query, so it can be edited
+    // and Enter opens what's typed. Returns the new input text ("" = no-op).
+    std::string completePalette()
+    {
+        if (!paletteOpen || paletteFiltered.empty())
+            return {};
+
+        auto text = completionText(paletteFiltered[(size_t) paletteSelected], paletteQuery);
+        setPaletteQuery(text);
+        return text;
     }
 
     void movePaletteSelection(int delta)

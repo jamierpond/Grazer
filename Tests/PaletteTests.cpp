@@ -173,6 +173,24 @@ auto tURLQueryPrefersTheExactItem =
         check(!item.isSearch);
 };
 
+auto tCompletionTakesTheRowsURL =
+    test("Palette/Tab takes a row's URL, or the search row's query") = []
+{
+    check(completionText({0, "GitHub", "https://github.com"}, "git")
+          == "https://github.com");
+    check(completionText(searchRow("hello world"), "hello world") == "hello world");
+};
+
+auto tEditedURLOpensWhatsTyped =
+    test("Palette/an edited row URL opens as typed, not the old row") = []
+{
+    auto all = mergePaletteItems(someTabs(), somePlaces(), lastUsedFrom({}));
+    auto ranked = rankPalette(all, {}, "https://github.com/jamierpond/Grazer");
+
+    check(ranked.front().isSearch);
+    check(ranked.front().url == "https://github.com/jamierpond/Grazer");
+};
+
 auto tSearchRowNeverDuplicated =
     test("Palette/a past search of the same query yields one row, not two") = []
 {

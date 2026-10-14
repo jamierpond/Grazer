@@ -30,4 +30,8 @@ std::vector<GoItem> rankPalette(const std::vector<GoItem>& all,
                                 const std::string& query);
 
 GoItem searchRow(const std::string& query);
+
+// What Tab / → puts in the input for `item`, ready to keep typing: the row's
+// URL, or for the search row the query it searches for.
+std::string completionText(const GoItem& item, const std::string& query);
 } // namespace grazer
