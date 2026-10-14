@@ -10,6 +10,12 @@ No tab strip, no address bar. `o` opens a palette that fuzzy-searches your open
 tabs, saved places and history, and previews tabs live as you move through
 them. Everything else is a key away.
 
+<p align="center">
+  <img src="docs/wikipedia.png" width="32%" alt="Grazer showing wikipedia.org">
+  <img src="docs/apple-mac.png" width="32%" alt="Grazer showing apple.com/mac">
+  <img src="docs/palette.png" width="32%" alt="The palette open over a page">
+</p>
+
 ## Keys
 
 | Key | Action | Key | Action |
@@ -31,6 +37,8 @@ In the palette: `^J`/`^K` move, `Enter` goes, `Esc` returns to where you were,
   tab is one search away from anywhere.
 - The binary is its own CLI: `Grazer --list-open-tabs`, `--focus-tab 3`,
   `--open-url github.com`.
+- `Grazer --snapshot out.png [--palette] <url>...` renders its own window to a
+  PNG (how the screenshots above are made).
 
 ## Build
 

@@ -34,6 +34,10 @@ using namespace eacp;
 using namespace Graphics;
 using namespace grazer;
 
+// `Grazer --snapshot ...` (see main): a throwaway profile, no session, no
+// control server, no Rudder -- it must never touch the running browser.
+static bool snapshotMode = false;
+
 struct Tab
 {
     Tab(std::int64_t idToUse, WebView::Options options)
@@ -96,6 +100,10 @@ struct BrowserView final : View
         chromeBar.loadHTML(chromeBarHtml);
 
         addChildren({content, chromeBar});
+
+        if (snapshotMode)
+            return;
+
         setupControl();
         setupRudder();
         restoreSession();
@@ -190,6 +198,9 @@ struct BrowserView final : View
 
     void pushTabsToRudder()
     {
+        if (!rudder)
+            return;
+
         auto contexts = std::vector<rudder::protocol::Context> {};
 
         for (auto& tab: tabs)
@@ -309,6 +320,9 @@ struct BrowserView final : View
 
     void saveSession()
     {
+        if (snapshotMode)
+            return;
+
         auto state = SessionState {};
 
         for (auto& tab: tabs)
@@ -855,7 +869,8 @@ struct BrowserView final : View
     std::function<void()> onActivateWindow = [] {};
 
     Api::GrazerApi api;
-    emberstore::Database durable {emberstore::appDataDirectory("pond", "Grazer"),
+    emberstore::Database durable {emberstore::appDataDirectory(
+                                      "pond", snapshotMode ? "GrazerSnapshot" : "Grazer"),
                                   emberstore::Durability::Durable};
     emberstore::Database atomic {durable.directory(),
                                  emberstore::Durability::Atomic};
@@ -959,6 +974,90 @@ struct GrazerApp
 
     BrowserView view;
     Window window {getOptions()};
+};
+
+// --- Snapshot ------------------------------------------------------------------
+
+// `Grazer --snapshot <out.png> [--palette] <url>...`: open the URLs as tabs (the
+// last one in front) in a 1400x900 window, wait for every page to load and
+// settle, optionally open the palette over it, and save the window's own
+// rendering -- chrome bar, page and palette web views -- as a PNG. Real Grazer
+// pixels for the README on a machine where screencapture has no
+// screen-recording grant. Runs beside the installed browser: no lock, no
+// control server, and a separate profile, so it never touches its tabs.
+struct SnapshotRequest
+{
+    std::string output;
+    std::vector<std::string> urls;
+    bool palette = false;
+};
+
+static SnapshotRequest snapshotRequest;
+
+struct SnapshotApp
+{
+    SnapshotApp()
+    {
+        window.setContentView(view);
+
+        for (auto& url: snapshotRequest.urls)
+            view.openTab(navigationURL(url));
+    }
+
+    static WindowOptions getOptions()
+    {
+        // Borderless, so a tiling window manager leaves its size alone.
+        auto options = GrazerApp::getOptions();
+        options.flags = {};
+        options.flags.add(WindowFlags::Borderless);
+        options.width = 1400;
+        options.height = 900;
+        options.showInactive = true;
+        return options;
+    }
+
+    // 4 Hz: wait for every tab to finish loading, then ~3 s for late layout,
+    // fonts and images; with --palette, open it and give it ~1.5 s to draw.
+    void tick()
+    {
+        if (capturing)
+            return;
+
+        for (auto& tab: view.tabs)
+            if (tab->view().isLoading())
+                return;
+
+        if (++settledTicks < 12)
+            return;
+
+        if (snapshotRequest.palette && !view.paletteOpen)
+        {
+            view.showPalette();
+            settledTicks = 6;
+            return;
+        }
+
+        capturing = true;
+        view.renderToImageAsync(2.f).then(
+            [](Image image)
+            {
+                if (!image.isValid())
+                {
+                    std::fputs("grazer: snapshot failed\n", stderr);
+                    Apps::quit(1);
+                    return;
+                }
+
+                image.save(FilePath {snapshotRequest.output});
+                Apps::quit(0);
+            });
+    }
+
+    BrowserView view;
+    Window window {getOptions()};
+    int settledTicks = 0;
+    bool capturing = false;
+    Threads::Timer timer {[this] { tick(); }, 4};
 };
 
 // --- CLI control commands -------------------------------------------------------
@@ -1190,6 +1289,22 @@ int main(int argc, char* argv[])
     using namespace eacp;
 
     Apps::setCommandLineArgs(argc, argv);
+
+    if (argc >= 4 && std::string {argv[1]} == "--snapshot")
+    {
+        snapshotMode = true;
+        snapshotRequest.output = argv[2];
+
+        for (int i = 3; i < argc; ++i)
+        {
+            if (std::string {argv[i]} == "--palette")
+                snapshotRequest.palette = true;
+            else
+                snapshotRequest.urls.emplace_back(argv[i]);
+        }
+
+        return Apps::run<SnapshotApp>();
+    }
 
     // An explicit control flag never launches a window: talk to the running
     // instance and exit.
