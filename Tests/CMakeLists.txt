@@ -6,6 +6,7 @@ add_executable(GrazerTests
         PaletteTests.cpp
         PlacesTests.cpp
         SessionTests.cpp
+        TabMatchTests.cpp
         UrlTests.cpp)
 
 target_link_libraries(GrazerTests PRIVATE NanoTest NanoTestMain GrazerBrowser)

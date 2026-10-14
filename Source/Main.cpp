@@ -10,6 +10,7 @@
 #include "Palette.h"
 #include "Places.h"
 #include "Session.h"
+#include "TabMatch.h"
 #include "Types.h"
 #include "Url.h"
 
@@ -59,6 +60,12 @@ struct Tab
     EA::OwningPointer<WebView> webView;
     std::string title;
     std::string url;
+
+    // The URL Grazer was asked to open here, until the tab navigates to any
+    // other page -- server redirects don't count, so a tab that went from
+    // /r to /r/week (or through a sign-in hop) is still the one asked for.
+    std::string openedUrl;
+
     bool failed = false;
 };
 
@@ -278,9 +285,32 @@ struct BrowserView final : View
         if (paletteOpen)
             hidePalette();
 
-        openTab(navigationURL(text));
+        // A page already open is switched to rather than loaded again: links
+        // from other apps and Rudder's favourites land on the tab they made
+        // last time.
+        auto url = navigationURL(text);
+
+        if (auto* open = openTabFor(url))
+        {
+            mru.touch(normalizeURL(open->url));
+            switchTo(*open);
+        }
+        else
+            openTab(url);
+
         onActivateWindow();
         return {true, ""};
+    }
+
+    Tab* openTabFor(const std::string& url)
+    {
+        auto open = std::vector<OpenTab> {};
+
+        for (auto& tab: tabs)
+            open.push_back({tab->url, tab->openedUrl});
+
+        auto index = findOpenTab(open, url);
+        return index < 0 ? nullptr : tabs[index].get();
     }
 
     // The chrome bar owns the titlebar band (its whole surface is an
@@ -353,6 +383,7 @@ struct BrowserView final : View
         // Known before any navigation event arrives, so a session save that
         // lands mid-load (or a load that fails outright) keeps the tab.
         tab.url = url;
+        tab.openedUrl = url;
         tab.view().loadURL(url);
         return tab;
     }
@@ -386,6 +417,9 @@ struct BrowserView final : View
         {
             if (url.starts_with("http"))
             {
+                if (pageKey(url) != pageKey(t->openedUrl))
+                    t->openedUrl.clear();
+
                 t->url = url;
                 t->failed = false;
                 history.recordVisit(url, "", MruStore::nowMs());

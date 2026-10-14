@@ -1,5 +1,6 @@
 #include "Url.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 
@@ -82,5 +83,16 @@ std::string normalizeURL(std::string url)
         url.pop_back();
 
     return url;
+}
+
+std::string pageKey(const std::string& url)
+{
+    auto key = normalizeURL(url.substr(0, url.find('#')));
+    auto hostEnd = std::min(key.find('/'), key.size());
+
+    for (std::size_t i = 0; i < hostEnd; ++i)
+        key[i] = (char) std::tolower((unsigned char) key[i]);
+
+    return key;
 }
 } // namespace grazer

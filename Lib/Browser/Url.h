@@ -24,4 +24,9 @@ std::string searchURLFor(const std::string& query);
 // slashes stripped. Used to match tabs against places, history and MRU
 // stamps.
 std::string normalizeURL(std::string url);
+
+// Canonical key for "the same page" when a URL is opened from outside:
+// normalizeURL without the #fragment and with the host lower-cased, so
+// mail.google.com/mail/u/1/#inbox is the page a tab at .../mail/u/1/ shows.
+std::string pageKey(const std::string& url);
 } // namespace grazer
