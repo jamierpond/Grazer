@@ -9,16 +9,21 @@
 # Grazer.entitlements.in and the profile at Contents/embedded.provisionprofile.
 #
 #   cmake -B build -DGRAZER_PASSKEYS=ON \
+#       -DGRAZER_TEAM_ID=<team id> \
+#       -DGRAZER_CODESIGN_IDENTITY="Developer ID Application: <name> (<team id>)" \
 #       -DGRAZER_PROVISIONING_PROFILE=/path/to/Grazer_Developer_ID.provisionprofile
+#
+# The team and identity have no defaults: which developer account signs
+# Grazer is always an explicit choice.
 #
 # Off by default: without a profile carrying the entitlement, a signed build
 # claiming it would be killed at launch, and the ad-hoc build is what we have.
 
 option(GRAZER_PASSKEYS "Sign Grazer with the browser passkey entitlement + profile" OFF)
 
-set(GRAZER_TEAM_ID "MBHR5VAUVQ" CACHE STRING "Apple team that owns Grazer's App ID")
-set(GRAZER_CODESIGN_IDENTITY "Developer ID Application: Tamber, Incorporated (MBHR5VAUVQ)"
-        CACHE STRING "codesign identity matching the provisioning profile")
+set(GRAZER_TEAM_ID "" CACHE STRING "Apple team that owns Grazer's App ID")
+set(GRAZER_CODESIGN_IDENTITY "" CACHE STRING
+        "codesign identity matching the provisioning profile")
 set(GRAZER_PROVISIONING_PROFILE "" CACHE FILEPATH
         "Developer ID provisioning profile for Grazer's bundle id with the web-browser.public-key-credential capability")
 
@@ -73,6 +78,12 @@ endfunction()
 function(grazer_enable_passkeys target bundle_id)
     if (NOT APPLE OR NOT GRAZER_PASSKEYS)
         return()
+    endif ()
+
+    if (GRAZER_TEAM_ID STREQUAL "" OR GRAZER_CODESIGN_IDENTITY STREQUAL "")
+        message(FATAL_ERROR
+                "GRAZER_PASSKEYS needs GRAZER_TEAM_ID and GRAZER_CODESIGN_IDENTITY "
+                "set explicitly (no defaults).")
     endif ()
 
     _grazer_check_profile("${GRAZER_PROVISIONING_PROFILE}" "${bundle_id}")
