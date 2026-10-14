@@ -12,7 +12,7 @@ them. Everything else is a key away.
 
 <p align="center">
   <img src="docs/wikipedia.png" width="49%" alt="Grazer showing wikipedia.org">
-  <img src="docs/apple-mac.png" width="49%" alt="Grazer showing apple.com/mac">
+  <img src="docs/apple-mac.png" width="49%" alt="The palette open over apple.com/mac">
 </p>
 
 ## Keys
