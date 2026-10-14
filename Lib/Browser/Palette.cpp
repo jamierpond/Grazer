@@ -6,7 +6,7 @@
 #include <unordered_set>
 #include <utility>
 
-namespace wim
+namespace grazer
 {
 namespace
 {
@@ -144,4 +144,4 @@ GoItem searchRow(const std::string& query)
     row.isSearch = true;
     return row;
 }
-} // namespace wim
+} // namespace grazer

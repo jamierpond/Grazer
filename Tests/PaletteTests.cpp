@@ -5,7 +5,7 @@
 #include <map>
 
 using namespace nano;
-using namespace wim;
+using namespace grazer;
 
 namespace
 {

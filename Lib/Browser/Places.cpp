@@ -5,7 +5,7 @@
 #include <fstream>
 #include <iterator>
 
-namespace wim
+namespace grazer
 {
 PlacesStore::PlacesStore(const emberstore::Database& db,
                          std::filesystem::path legacyPathToUse)
@@ -45,7 +45,7 @@ std::vector<Place> PlacesStore::all()
 std::filesystem::path PlacesStore::defaultLegacyPath()
 {
     auto* home = std::getenv("HOME");
-    return std::filesystem::path(home != nullptr ? home : ".") / ".wim"
+    return std::filesystem::path(home != nullptr ? home : ".") / ".grazer"
            / "places.json";
 }
 
@@ -76,4 +76,4 @@ void PlacesStore::seedDefaults()
     for (auto& place: seeds)
         collection.doc(normalizeURL(place.url)).set(place);
 }
-} // namespace wim
+} // namespace grazer

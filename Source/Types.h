@@ -64,12 +64,12 @@ namespace Api
 // preview logic runs natively. Behaviour is injected by BrowserView through
 // the std::function members -- the codegen executable default-constructs this
 // class, so it must stay header-only and default-constructible.
-class WimApi
+class GrazerApi
 {
 public:
     void reflect(Miro::ApiReflector& r)
     {
-        using T = WimApi;
+        using T = GrazerApi;
 
         r.commands<&T::getResults,
                    &T::setQuery,

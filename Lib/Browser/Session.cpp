@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace wim
+namespace grazer
 {
 SessionState sanitizeSession(SessionState state)
 {
@@ -29,4 +29,4 @@ void SessionStore::save(SessionState state)
 {
     document.set(sanitizeSession(std::move(state)));
 }
-} // namespace wim
+} // namespace grazer

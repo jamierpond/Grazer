@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace wim
+namespace grazer
 {
 struct Place
 {
@@ -25,7 +25,7 @@ struct PlacesFile
 };
 
 // The user's saved places, an emberstore collection keyed by normalized URL.
-// First run imports the legacy ~/.wim/places.json if present, else seeds a
+// First run imports the legacy ~/.grazer/places.json if present, else seeds a
 // starter set.
 struct PlacesStore
 {
@@ -48,4 +48,4 @@ struct PlacesStore
     emberstore::Collection<Place> collection;
     std::filesystem::path legacyPath;
 };
-} // namespace wim
+} // namespace grazer

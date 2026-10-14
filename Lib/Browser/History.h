@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace wim
+namespace grazer
 {
 struct HistoryEntry
 {
@@ -46,4 +46,4 @@ struct HistoryStore
 
     emberstore::Collection<HistoryEntry> entries;
 };
-} // namespace wim
+} // namespace grazer

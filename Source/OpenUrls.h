@@ -4,8 +4,8 @@
 #include <string>
 #include <vector>
 
-// URLs macOS hands Wim: `open -b audio.pond.wim <url>`, a link clicked in
-// another app once Wim is the default browser, NSWorkspace openURLs:
+// URLs macOS hands Grazer: `open -b audio.pond.grazer <url>`, a link clicked in
+// another app once Grazer is the default browser, NSWorkspace openURLs:
 // withApplicationAtURL: (Rudder favourites). They arrive as kAEGetURL Apple
 // events, and on a cold launch before any window exists -- so they queue
 // until the app sets a handler. Elsewhere this is a no-op.

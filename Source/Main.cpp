@@ -17,7 +17,7 @@
 #include <eacp/WebView/WebView/JsStringLiteral.h>
 #include <emberstore/AppDatabase.h>
 
-#if WIM_RUDDER
+#if GRAZER_RUDDER
 #include <RudderClient.h>
 #endif
 
@@ -32,7 +32,7 @@
 
 using namespace eacp;
 using namespace Graphics;
-using namespace wim;
+using namespace grazer;
 
 struct Tab
 {
@@ -82,7 +82,7 @@ struct BrowserView final : View
         transport.getBridge().use(api);
 
         chromeBar.addScriptMessageHandler(
-            "wimChrome",
+            "grazerChrome",
             [this](const std::string& command)
             {
                 if (command == "toggleMaximize")
@@ -103,7 +103,7 @@ struct BrowserView final : View
     // --- CLI control plane ------------------------------------------------------
 
     // Serve the singleton control channel: list / focus / open commands from a
-    // later `./Wim --...` invocation land here. Only the lock-holding instance
+    // later `./Grazer --...` invocation land here. Only the lock-holding instance
     // reaches this, so the name is ours -- but a control-plane hiccup must
     // never take the browser down, hence the swallowed IPC::Error.
     void setupControl()
@@ -131,21 +131,21 @@ struct BrowserView final : View
 
     // --- Rudder ---------------------------------------------------------------
 
-    // Wim's tabs are contexts in Rudder, the app switcher: a tab is a search
+    // Grazer's tabs are contexts in Rudder, the app switcher: a tab is a search
     // away from anywhere, and picking one lands here. Silent when Rudder isn't
     // running; a no-op where the client isn't built.
     void setupRudder()
     {
-#if WIM_RUDDER
-        rudder.emplace(rudder::protocol::Hello {"Wim", "audio.pond.wim", 0});
+#if GRAZER_RUDDER
+        rudder.emplace(rudder::protocol::Hello {"Grazer", "audio.pond.grazer", 0});
         rudder->onActivate = [this](const std::string& contextId)
         {
             if (auto id = rudderTabId(contextId))
                 focusTabById(*id);
         };
 
-        // Rudder previewing a tab: show it, but never activate Wim or raise
-        // the window -- Rudder raises Wim itself while the row is selected,
+        // Rudder previewing a tab: show it, but never activate Grazer or raise
+        // the window -- Rudder raises Grazer itself while the row is selected,
         // and a raise from here would land late, over wherever the user went.
         rudder->onPreview = [this](const std::string& contextId)
         {
@@ -160,7 +160,7 @@ struct BrowserView final : View
     // the push waits for the end of the event loop turn and goes once.
     void scheduleRudderPush()
     {
-#if WIM_RUDDER
+#if GRAZER_RUDDER
         if (rudderPushPending)
             return;
 
@@ -174,7 +174,7 @@ struct BrowserView final : View
 #endif
     }
 
-#if WIM_RUDDER
+#if GRAZER_RUDDER
     static std::optional<std::int64_t> rudderTabId(const std::string& contextId)
     {
         try
@@ -240,7 +240,7 @@ struct BrowserView final : View
         return {true, ""};
     }
 
-    // Switches to the tab without bringing Wim forward. An open palette
+    // Switches to the tab without bringing Grazer forward. An open palette
     // would preview its selection right back over it.
     void showTab(Tab& tab)
     {
@@ -324,7 +324,7 @@ struct BrowserView final : View
         auto& tab = tabs.createNew(nextTabId++, getWebViewOptions());
         tab.view().addUserScript(vimiumScript);
         tab.view().addScriptMessageHandler(
-            "wim", [this](const std::string& command) { handleCommand(command); });
+            "grazer", [this](const std::string& command) { handleCommand(command); });
 
         wireTab(tab);
 
@@ -343,7 +343,7 @@ struct BrowserView final : View
 
     // A page-initiated popup (target=_blank, window.open) adopted as a tab. It
     // shares the opener's web-process configuration, so the vimium user script
-    // and the "wim" message handler are already installed -- re-adding them
+    // and the "grazer" message handler are already installed -- re-adding them
     // would collide on the shared user-content controller.
     void adoptPopup(EA::OwningPointer<WebView> popup)
     {
@@ -686,7 +686,7 @@ struct BrowserView final : View
         auto canForward = activeTab != nullptr && activeTab->view().canGoForward();
 
         chromeBar.evaluateJavaScript(
-            std::string {"window.__wimNav && window.__wimNav("}
+            std::string {"window.__grazerNav && window.__grazerNav("}
             + (canBack ? "true" : "false") + "," + (canForward ? "true" : "false")
             + ")");
     }
@@ -775,7 +775,7 @@ struct BrowserView final : View
 
         // The engine tail Safari itself appends. WebKit derives the OS/WebKit
         // prefix, so the UA reads as stock Safari and sites (Google sign-in
-        // especially) treat Wim as a real browser, not an embedded web view.
+        // especially) treat Grazer as a real browser, not an embedded web view.
         options.applicationNameForUserAgent = "Version/26.0 Safari/605.1.15";
 
         options.backForwardGestures = true;
@@ -786,7 +786,7 @@ struct BrowserView final : View
 
     static WebView::Options paletteOptions()
     {
-        auto options = embeddedOptions("WimGo");
+        auto options = embeddedOptions("GrazerGo");
         options.transparentBackground = true;
         return options;
     }
@@ -817,7 +817,7 @@ struct BrowserView final : View
 </div>
 <script>
   const post = message =>
-      window.webkit?.messageHandlers?.wimChrome?.postMessage(message);
+      window.webkit?.messageHandlers?.grazerChrome?.postMessage(message);
 
   addEventListener('dblclick', event => {
       if (event.target.tagName !== 'BUTTON')
@@ -827,22 +827,22 @@ struct BrowserView final : View
   back.onclick = () => post('back');
   fwd.onclick = () => post('forward');
 
-  window.__wimNav = (canBack, canForward) => {
+  window.__grazerNav = (canBack, canForward) => {
       back.disabled = !canBack;
       fwd.hidden = !canForward;
   };
 </script></body></html>)HTML";
 
-    // Bound by WimApp, which owns the Window: double-clicking the chrome bar
+    // Bound by GrazerApp, which owns the Window: double-clicking the chrome bar
     // zooms to fill the workspace, like a native titlebar.
     std::function<void()> onToggleMaximize = [] {};
 
-    // Bound by WimApp: raise and activate the window. Fired when a CLI control
+    // Bound by GrazerApp: raise and activate the window. Fired when a CLI control
     // command (focus / open / a duplicate launch) brings the browser forward.
     std::function<void()> onActivateWindow = [] {};
 
-    Api::WimApi api;
-    emberstore::Database durable {emberstore::appDataDirectory("pond", "Wim"),
+    Api::GrazerApi api;
+    emberstore::Database durable {emberstore::appDataDirectory("pond", "Grazer"),
                                   emberstore::Durability::Durable};
     emberstore::Database atomic {durable.directory(),
                                  emberstore::Durability::Atomic};
@@ -870,7 +870,7 @@ struct BrowserView final : View
 
     // The CLI control plane. controlServer is last on purpose: it must be torn
     // down before the bridge and api it dispatches into.
-#if WIM_RUDDER
+#if GRAZER_RUDDER
     std::optional<rudder::RudderClient> rudder;
     std::vector<rudder::protocol::Context> pushedToRudder;
     bool rudderPushPending = false;
@@ -881,9 +881,9 @@ struct BrowserView final : View
     std::optional<IPC::RpcServer> controlServer;
 };
 
-struct WimApp
+struct GrazerApp
 {
-    WimApp()
+    GrazerApp()
     {
         setApplicationMenuBar(buildMenuBar());
         view.onToggleMaximize = [this] { window.toggleMaximize(); };
@@ -891,8 +891,8 @@ struct WimApp
         window.setContentView(view);
         window.toggleMaximize();
 
-        // URLs from macOS (a link opened with Wim, `open -b audio.pond.wim`)
-        // open as new tabs, like `--open-url`; ones that launched Wim waited
+        // URLs from macOS (a link opened with Grazer, `open -b audio.pond.grazer`)
+        // open as new tabs, like `--open-url`; ones that launched Grazer waited
         // in the queue for this window.
         OpenUrls::setHandler([this](const std::string& url)
                              { view.openUrlFromControl(url); });
@@ -904,7 +904,7 @@ struct WimApp
     static MenuBar buildMenuBar()
     {
         auto bar = MenuBar {};
-        bar.add(standardApplicationMenu("Wim"));
+        bar.add(standardApplicationMenu("Grazer"));
         bar.add(standardEditMenu());
 
         auto viewMenu = Menu {"View"};
@@ -926,7 +926,7 @@ struct WimApp
     {
         auto options = WindowOptions();
 
-        options.title = "Wim";
+        options.title = "Grazer";
         options.width = 1100;
         options.height = 760;
         options.minWidth = 480;
@@ -976,7 +976,7 @@ std::optional<ControlRequest> pendingRequest;
 
 [[noreturn]] void usageError(const std::string& message)
 {
-    std::fprintf(stderr, "wim: %s\n", message.c_str());
+    std::fprintf(stderr, "grazer: %s\n", message.c_str());
     std::exit(2);
 }
 
@@ -1029,7 +1029,7 @@ std::optional<ControlRequest> parseControlRequest(const std::vector<std::string>
 } // namespace
 
 // A windowless app that dials the running instance, issues the pending command
-// and quits with the result. It never creates a Window, so `./Wim --...` acts
+// and quits with the result. It never creates a Window, so `./Grazer --...` acts
 // on the existing browser without launching a second one. Missing instance:
 // the dial never lands, onDisconnected reports "not running" and exits 1 (a
 // duplicate-launch reactivate exits 0 silently -- a plain launch shouldn't
@@ -1063,7 +1063,7 @@ struct ControlClientApp
             auto reactivate = pendingRequest->kind == ControlKind::Reactivate;
 
             if (!connected && !reactivate)
-                std::fputs("wim: not running\n", stderr);
+                std::fputs("grazer: not running\n", stderr);
 
             eacp::Apps::quit(reactivate || connected ? 0 : 1);
         };
@@ -1108,7 +1108,7 @@ struct ControlClientApp
     }
 
     // A duplicate launch macOS started with URLs (`open -n`, a second copy of
-    // the bundle): open them in the running Wim instead of just raising it.
+    // the bundle): open them in the running Grazer instead of just raising it.
     void forwardUrls(const std::vector<std::string>& urls)
     {
         unanswered = urls.size();
@@ -1142,7 +1142,7 @@ struct ControlClientApp
     void reportAck(const Control::Ack& ack)
     {
         if (!ack.ok && !ack.message.empty())
-            std::fprintf(stderr, "wim: %s\n", ack.message.c_str());
+            std::fprintf(stderr, "grazer: %s\n", ack.message.c_str());
 
         finish(ack.ok ? 0 : 1);
     }
@@ -1152,7 +1152,7 @@ struct ControlClientApp
         if (settled)
             return;
 
-        std::fprintf(stderr, "wim: %s\n", reason.empty() ? "request failed"
+        std::fprintf(stderr, "grazer: %s\n", reason.empty() ? "request failed"
                                                          : reason.c_str());
         finish(1);
     }
@@ -1192,7 +1192,7 @@ int main(int argc, char* argv[])
 
     // Hold the per-user singleton for the whole process; the
     // static locals outlive Apps::run, so the lock is released only at exit
-    // (or by the kernel on a crash). Losing it means another Wim already owns
+    // (or by the kernel on a crash). Losing it means another Grazer already owns
     // the window -- raise that one and go, don't open a second.
     static IPC::Lock instanceLock {Control::lockName};
     static IPC::ScopedLock held {instanceLock};
@@ -1203,5 +1203,5 @@ int main(int argc, char* argv[])
         return Apps::run<ControlClientApp>();
     }
 
-    return Apps::run<WimApp>(argc, argv);
+    return Apps::run<GrazerApp>(argc, argv);
 }

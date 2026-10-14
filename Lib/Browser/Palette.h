@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace wim
+namespace grazer
 {
 using LastUsedFn = std::function<std::int64_t(const std::string& normalizedUrl)>;
 
@@ -30,4 +30,4 @@ std::vector<GoItem> rankPalette(const std::vector<GoItem>& all,
                                 const std::string& query);
 
 GoItem searchRow(const std::string& query);
-} // namespace wim
+} // namespace grazer

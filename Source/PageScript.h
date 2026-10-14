@@ -8,12 +8,12 @@
 // command string to the native side, handled in BrowserView::handleCommand.
 static constexpr auto vimiumScript = R"JS(
 (() => {
-    if (window.__wimInstalled)
+    if (window.__grazerInstalled)
         return;
-    window.__wimInstalled = true;
+    window.__grazerInstalled = true;
 
     const post = command =>
-        window.webkit?.messageHandlers?.wim?.postMessage(command);
+        window.webkit?.messageHandlers?.grazer?.postMessage(command);
 
     const step = 60;
     const half = () => window.innerHeight / 2;

@@ -1,4 +1,4 @@
-// Configure (if needed) + build Wim.app with CMake/Ninja.
+// Configure (if needed) + build Grazer.app with CMake/Ninja.
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { BUILD_DIR, cpmSourceArgs, main, run } from './lib.mjs';

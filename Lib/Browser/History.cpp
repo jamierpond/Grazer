@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace wim
+namespace grazer
 {
 HistoryStore::HistoryStore(const emberstore::Database& db)
     : entries(db.collection<HistoryEntry>("history"))
@@ -73,4 +73,4 @@ void HistoryStore::prune()
     for (std::size_t i = 0; i < excess; ++i)
         entries.remove(aged[i].second);
 }
-} // namespace wim
+} // namespace grazer

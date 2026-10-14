@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace wim
+namespace grazer
 {
 struct SessionState
 {
@@ -33,4 +33,4 @@ struct SessionStore
 
     emberstore::Document<SessionState> document;
 };
-} // namespace wim
+} // namespace grazer

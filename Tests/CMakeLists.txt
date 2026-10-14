@@ -1,4 +1,4 @@
-add_executable(WimTests
+add_executable(GrazerTests
         ErrorPageTests.cpp
         FuzzyMatchTests.cpp
         HistoryTests.cpp
@@ -8,5 +8,5 @@ add_executable(WimTests
         SessionTests.cpp
         UrlTests.cpp)
 
-target_link_libraries(WimTests PRIVATE NanoTest NanoTestMain WimBrowser)
-nano_discover_tests(WimTests)
+target_link_libraries(GrazerTests PRIVATE NanoTest NanoTestMain GrazerBrowser)
+nano_discover_tests(GrazerTests)

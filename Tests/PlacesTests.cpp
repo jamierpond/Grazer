@@ -9,13 +9,13 @@
 #include <fstream>
 
 using namespace nano;
-using namespace wim;
+using namespace grazer;
 
 namespace
 {
 std::filesystem::path missingLegacy()
 {
-    return std::filesystem::temp_directory_path() / "WimTests"
+    return std::filesystem::temp_directory_path() / "GrazerTests"
            / "no-such-legacy.json";
 }
 } // namespace
@@ -62,7 +62,7 @@ auto tToggleFallsBackToURLTitle =
 auto tImportsLegacyFile = test("Places/first run imports the legacy JSON") = []
 {
     auto legacy =
-        std::filesystem::temp_directory_path() / "WimTests" / "legacy-places.json";
+        std::filesystem::temp_directory_path() / "GrazerTests" / "legacy-places.json";
     std::filesystem::create_directories(legacy.parent_path());
 
     {

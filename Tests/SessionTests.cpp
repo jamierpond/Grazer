@@ -5,7 +5,7 @@
 #include <NanoTest/NanoTest.h>
 
 using namespace nano;
-using namespace wim;
+using namespace grazer;
 
 auto tRoundTrips = test("Session/save and load round-trip") = []
 {

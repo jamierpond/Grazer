@@ -1,20 +1,20 @@
-// Build Release + install to /Applications/Wim.app.
+// Build Release + install to /Applications/Grazer.app.
 //
 // The new bundle is copied next to the old one first, then swapped in by
-// rename, so /Applications never holds a half-copied Wim. A running installed
-// Wim is asked to quit first (and reopened after); dev builds are left alone.
+// rename, so /Applications never holds a half-copied Grazer. A running installed
+// Grazer is asked to quit first (and reopened after); dev builds are left alone.
 // LaunchServices is pointed at the installed copy and told to forget the
-// build*/Wim.app bundles, so `open -b audio.pond.wim` and apps that open URLs
-// "with" Wim (Rudder favourites) land on /Applications.
+// build*/Grazer.app bundles, so `open -b audio.pond.grazer` and apps that open URLs
+// "with" Grazer (Rudder favourites) land on /Applications.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { rm, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { RELEASE_BUILD_DIR, ROOT, cpmSourceArgs, main, run } from './lib.mjs';
 
-const APP = '/Applications/Wim.app';
-const STAGING = '/Applications/.Wim.app.installing';
-const OLD = '/Applications/.Wim.app.old';
+const APP = '/Applications/Grazer.app';
+const STAGING = '/Applications/.Grazer.app.installing';
+const OLD = '/Applications/.Grazer.app.old';
 const LSREGISTER =
   '/System/Library/Frameworks/CoreServices.framework/Frameworks/' +
   'LaunchServices.framework/Support/lsregister';
@@ -58,7 +58,7 @@ async function quitInstalled() {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
   if (pids.some(alive))
-    throw new Error('Wim did not quit');
+    throw new Error('Grazer did not quit');
 
   return pids.length > 0;
 }
@@ -70,10 +70,10 @@ await main(async () => {
       ...cpmSourceArgs(),
     ]);
 
-  await run('cmake', ['--build', RELEASE_BUILD_DIR, '--target', 'Wim']);
+  await run('cmake', ['--build', RELEASE_BUILD_DIR, '--target', 'Grazer']);
 
   await rm(STAGING, { recursive: true, force: true });
-  await run('ditto', [join(RELEASE_BUILD_DIR, 'Wim.app'), STAGING]);
+  await run('ditto', [join(RELEASE_BUILD_DIR, 'Grazer.app'), STAGING]);
 
   // The linker's ad-hoc signature covers the executable only; seal the whole
   // bundle (Info.plist, icon) so it verifies and carries the bundle id. Still
@@ -94,7 +94,7 @@ await main(async () => {
   await run(LSREGISTER, ['-f', APP]);
 
   for (const dir of readdirSync(ROOT).filter((name) => name.startsWith('build'))) {
-    const dev = join(ROOT, dir, 'Wim.app');
+    const dev = join(ROOT, dir, 'Grazer.app');
 
     // Fails (-10814) for a bundle LaunchServices never saw; that's fine.
     if (existsSync(dev))

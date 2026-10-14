@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.31)
 
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "")
 
-project(Wim VERSION 0.1.0 LANGUAGES C CXX)
+project(Grazer VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,8 +29,8 @@ CPMAddPackage(
 
 list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 
-# Publishes Wim's tabs to Rudder (the app switcher) as contexts, so a tab is
-# one search away from anywhere. Only Rudder's client library is built; Wim
+# Publishes Grazer's tabs to Rudder (the app switcher) as contexts, so a tab is
+# one search away from anywhere. Only Rudder's client library is built; Grazer
 # behaves exactly as before when Rudder isn't running. Work against a local
 # Rudder checkout with:
 #   cmake -B build -DCPM_Rudder_SOURCE=$HOME/projects/Rudder
@@ -43,11 +43,11 @@ if (APPLE)
     )
 endif ()
 
-# Wim's browser logic (URL/omnibox parsing, places, history, session,
+# Grazer's browser logic (URL/omnibox parsing, places, history, session,
 # palette ranking) lives in a plain static library so it stays unit-testable
 # without the app shell. Types.h (the palette wire types) is shared with the
 # app / codegen, hence Source on the include path.
-add_library(WimBrowser STATIC
+add_library(GrazerBrowser STATIC
         Lib/Browser/ErrorPage.cpp
         Lib/Browser/History.cpp
         Lib/Browser/Mru.cpp
@@ -56,39 +56,50 @@ add_library(WimBrowser STATIC
         Lib/Browser/Session.cpp
         Lib/Browser/Url.cpp)
 
-target_include_directories(WimBrowser PUBLIC Lib/Browser Source)
-target_link_libraries(WimBrowser PUBLIC emberstore)
+target_include_directories(GrazerBrowser PUBLIC Lib/Browser Source)
+target_link_libraries(GrazerBrowser PUBLIC emberstore)
 
-# eacp's bundle plist template plus http/https URL types, so Wim can be
+# eacp's bundle plist template plus http/https URL types, so Grazer can be
 # picked as the default browser and gets the URLs macOS opens with it.
 set(EACP_MACOS_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/macOSBundleInfo.plist.in"
         CACHE INTERNAL "eacp macOS bundle Info.plist template")
 
-eacp_add_webview_app(Wim
+eacp_add_webview_app(Grazer
         SOURCES     Source/Main.cpp
-        API         Api::WimApi
+        API         Api::GrazerApi
         API_HEADER  ${CMAKE_CURRENT_SOURCE_DIR}/Source/Types.h
         WEB_DIR     ${CMAKE_CURRENT_SOURCE_DIR}/web
-        CATEGORY    WimGo
-        BUNDLE_ID   audio.pond.wim
-        BUNDLE_NAME "Wim"
+        CATEGORY    GrazerGo
+        BUNDLE_ID   audio.pond.grazer
+        BUNDLE_NAME "Grazer"
         REACT)
 
-target_link_libraries(Wim PRIVATE WimBrowser)
+target_link_libraries(Grazer PRIVATE GrazerBrowser)
 
-# Takes the URLs macOS hands Wim (kAEGetURL); see Source/OpenUrls.h.
+# Takes the URLs macOS hands Grazer (kAEGetURL); see Source/OpenUrls.h.
 if (APPLE)
     enable_language(OBJCXX)
-    target_sources(Wim PRIVATE Source/OpenUrls-macOS.mm)
+    target_sources(Grazer PRIVATE Source/OpenUrls-macOS.mm)
 endif ()
 
-# The at-rest icon Finder and the Dock draw. Wim.icns is generated from
-# Assets/Icon/wim-icon.svg by `just icon` and committed.
-eacp_set_app_icon(Wim ICNS ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Icon/Wim.icns)
+# The at-rest icon Finder, the Dock and Explorer draw. Assets/Icon is made by
+# `just icon` and committed. macOS builds its .icns from Icon.png; Windows
+# takes a prebuilt .ico whose small frames are a plain silhouette, which IMAGE
+# (one picture downscaled to every size) can't express.
+if (WIN32)
+    eacp_set_app_icon(Grazer ICO ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Icon/Icon.ico)
+else ()
+    eacp_set_app_icon(Grazer IMAGE ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Icon/Icon.png)
+endif ()
+
+# Passkeys need Apple's browser entitlement + a provisioning profile; off
+# until that profile exists. See cmake/GrazerPasskeys.cmake.
+include(cmake/GrazerPasskeys.cmake)
+grazer_enable_passkeys(Grazer audio.pond.grazer)
 
 if (TARGET RudderClient)
-    target_link_libraries(Wim PRIVATE RudderClient)
-    target_compile_definitions(Wim PRIVATE WIM_RUDDER=1)
+    target_link_libraries(Grazer PRIVATE RudderClient)
+    target_compile_definitions(Grazer PRIVATE GRAZER_RUDDER=1)
 endif ()
 
 if (NOT TARGET NanoTest)

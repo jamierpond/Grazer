@@ -1,6 +1,6 @@
 #include "ErrorPage.h"
 
-namespace wim
+namespace grazer
 {
 std::string htmlEscape(const std::string& text)
 {
@@ -57,7 +57,7 @@ std::string errorPageHTML(const std::string& url, const std::string& error)
 </head>
 <body>
 <main>
-<h1>Wim can&#39;t reach this page</h1>
+<h1>Grazer can&#39;t reach this page</h1>
 <p class="url">)"
            + htmlEscape(url) + R"(</p>
 <p class="error">)"
@@ -69,4 +69,4 @@ std::string errorPageHTML(const std::string& url, const std::string& error)
 </html>
 )";
 }
-} // namespace wim
+} // namespace grazer

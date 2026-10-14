@@ -23,10 +23,10 @@ void receive(std::string url)
 } // namespace
 } // namespace OpenUrls
 
-@interface WimUrlEventReceiver : NSObject
+@interface GrazerUrlEventReceiver : NSObject
 @end
 
-@implementation WimUrlEventReceiver
+@implementation GrazerUrlEventReceiver
 
 - (void)handleGetUrl:(NSAppleEventDescriptor*)event
       withReplyEvent:(NSAppleEventDescriptor*)reply
@@ -48,7 +48,7 @@ namespace OpenUrls
 // replace it; any later and a cold launch's URL is lost.
 void listen()
 {
-    static auto* receiver = [[WimUrlEventReceiver alloc] init];
+    static auto* receiver = [[GrazerUrlEventReceiver alloc] init];
 
     [[NSNotificationCenter defaultCenter]
         addObserverForName:NSApplicationWillFinishLaunchingNotification

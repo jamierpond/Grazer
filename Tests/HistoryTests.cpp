@@ -5,11 +5,11 @@
 #include <NanoTest/NanoTest.h>
 
 using namespace nano;
-using namespace wim;
+using namespace grazer;
 
 namespace
 {
-wim::HistoryEntry entryFor(HistoryStore& store, const std::string& url)
+grazer::HistoryEntry entryFor(HistoryStore& store, const std::string& url)
 {
     for (auto& entry: store.all())
         if (entry.url == url)

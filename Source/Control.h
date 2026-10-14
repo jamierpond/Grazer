@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-// The singleton control plane. The first Wim to start holds `lockName` and
+// The singleton control plane. The first Grazer to start holds `lockName` and
 // serves `ControlApi` on `channelName`; every later invocation -- a duplicate
 // launch or a `--list-open-tabs` / `--focus-tab` / `--open-url` CLI command --
 // dials that channel instead of opening a second window. Names are per user
@@ -16,8 +16,8 @@
 namespace Control
 {
 
-inline constexpr auto lockName = "audio.pond.wim";
-inline constexpr auto channelName = "audio.pond.wim.control";
+inline constexpr auto lockName = "audio.pond.grazer";
+inline constexpr auto channelName = "audio.pond.grazer.control";
 
 // One open tab, as reported to the CLI. `title` falls back to the URL before
 // a page has named itself, mirroring how the Go palette renders a fresh tab.
