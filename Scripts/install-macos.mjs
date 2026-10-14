@@ -6,6 +6,15 @@
 // LaunchServices is pointed at the installed copy and told to forget the
 // build*/Grazer.app bundles, so `open -b audio.pond.grazer` and apps that open URLs
 // "with" Grazer (Rudder favourites) land on /Applications.
+//
+// Grazer was called Wim (audio.pond.wim, before that com.pond.wim). The old
+// /Applications/Wim.app is quit and removed, and every bundle LaunchServices
+// knows under those ids is unregistered, so nothing resolves to Wim any more.
+// Wim's data (~/Library/Application Support/pond/Wim, WebKit audio.pond.wim)
+// is left alone.
+//
+// The Release tree is always reconfigured, so CPM refetches branch-pinned
+// packages (Rudder@main) and the install has the latest Rudder client.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { rm, rename } from 'node:fs/promises';
@@ -15,6 +24,8 @@ import { RELEASE_BUILD_DIR, ROOT, cpmSourceArgs, main, run } from './lib.mjs';
 const APP = '/Applications/Grazer.app';
 const STAGING = '/Applications/.Grazer.app.installing';
 const OLD = '/Applications/.Grazer.app.old';
+const OLD_NAME_APP = '/Applications/Wim.app';
+const OLD_BUNDLE_IDS = ['audio.pond.wim', 'com.pond.wim'];
 const LSREGISTER =
   '/System/Library/Frameworks/CoreServices.framework/Frameworks/' +
   'LaunchServices.framework/Support/lsregister';
@@ -25,17 +36,17 @@ function bundleId(app) {
     { encoding: 'utf8' }).trim();
 }
 
-// Gracefully quit (a quit Apple event, like Cmd+Q) whatever runs from APP,
+// Gracefully quit (a quit Apple event, like Cmd+Q) whatever runs from `app`,
 // found by its bundle id. Returns whether one was running.
-async function quitInstalled() {
-  if (!existsSync(APP))
+async function quitInstalled(app = APP) {
+  if (!existsSync(app))
     return false;
 
   const script = `
     ObjC.import('AppKit');
     ObjC.unwrap($.NSRunningApplication
-      .runningApplicationsWithBundleIdentifier(${JSON.stringify(bundleId(APP))}))
-      .filter((app) => ObjC.unwrap(app.bundleURL.path) === ${JSON.stringify(APP)})
+      .runningApplicationsWithBundleIdentifier(${JSON.stringify(bundleId(app))}))
+      .filter((app) => ObjC.unwrap(app.bundleURL.path) === ${JSON.stringify(app)})
       .map((app) => { app.terminate; return app.processIdentifier; })
       .join(' ');
   `;
@@ -58,17 +69,46 @@ async function quitInstalled() {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
   if (pids.some(alive))
-    throw new Error('Grazer did not quit');
+    throw new Error(`${app} did not quit`);
 
   return pids.length > 0;
 }
 
+// Every bundle path LaunchServices has registered under one of `ids`.
+function registeredPaths(ids) {
+  const dump = execFileSync(LSREGISTER, ['-dump'],
+    { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 });
+  const paths = new Set();
+
+  for (const record of dump.split(/^-{20,}$/m)) {
+    const id = record.match(/^identifier:\s+(\S+)/m)?.[1];
+    const path = record.match(/^path:\s+(.+?)(?: \(0x[0-9a-f]+\))?$/m)?.[1];
+
+    if (id && path && ids.includes(id))
+      paths.add(path);
+  }
+
+  return [...paths];
+}
+
+// Quit and remove /Applications/Wim.app, then unregister every Wim bundle.
+async function removeOldName() {
+  if (existsSync(OLD_NAME_APP)) {
+    await quitInstalled(OLD_NAME_APP);
+    await run(LSREGISTER, ['-u', OLD_NAME_APP], { stdio: 'ignore' }).catch(() => {});
+    await rm(OLD_NAME_APP, { recursive: true, force: true });
+    console.log(`Removed ${OLD_NAME_APP}`);
+  }
+
+  for (const path of registeredPaths(OLD_BUNDLE_IDS))
+    await run(LSREGISTER, ['-u', path], { stdio: 'ignore' }).catch(() => {});
+}
+
 await main(async () => {
-  if (!existsSync(join(RELEASE_BUILD_DIR, 'build.ninja')))
-    await run('cmake', [
-      '-G', 'Ninja', '-B', RELEASE_BUILD_DIR, '-DCMAKE_BUILD_TYPE=Release',
-      ...cpmSourceArgs(),
-    ]);
+  await run('cmake', [
+    '-G', 'Ninja', '-B', RELEASE_BUILD_DIR, '-DCMAKE_BUILD_TYPE=Release',
+    ...cpmSourceArgs(),
+  ]);
 
   await run('cmake', ['--build', RELEASE_BUILD_DIR, '--target', 'Grazer']);
 
@@ -80,6 +120,8 @@ await main(async () => {
   // ad-hoc: no identity, no keychain.
   await run('codesign', ['--force', '--sign', '-', STAGING]);
   await run('codesign', ['--verify', '--deep', '--strict', STAGING]);
+
+  await removeOldName();
 
   const wasRunning = await quitInstalled();
 
