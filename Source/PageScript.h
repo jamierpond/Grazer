@@ -37,50 +37,273 @@ static constexpr auto vimiumScript = R"JS(
         'J': () => post('prevTab'),
         'K': () => post('nextTab'),
         'f': () => enterHintMode(),
-        '/': () => enterFindMode(),
-        'n': () => findNext(false),
-        'N': () => findNext(true),
+        '/': () => find.open(),
+        'n': () => find.next(),
+        'N': () => find.previous(),
     };
 
-    // --- Find in page ('/') ------------------------------------------------
+    // --- Find in page (Cmd+F, '/') ----------------------------------------
+    //
+    // A bar pinned top-right, in a closed shadow root so the page's CSS can't
+    // reach it. Every match is painted with the CSS Custom Highlight API --
+    // the page's DOM is never touched -- and the current one is scrolled to.
+    // Typing searches; Enter / Shift+Enter step; Escape closes and clears.
+    // The native side drives it through window.__grazerFind
+    // (BrowserView::findInPage): Cmd+F opens, Cmd+G / Shift-Cmd+G step.
+    // Lowercase queries ignore case; any capital makes them match it, and a
+    // space matches any run of whitespace.
 
-    let lastFind = '';
+    const find = (() => {
+        const maxMatches = 2000;
 
-    function findNext(backwards) {
-        if (lastFind)
-            window.find(lastFind, false, backwards, true, false, false, false);
-    }
+        const pageSheet = new CSSStyleSheet();
+        pageSheet.replaceSync(
+            '::highlight(grazer-find) { background: rgba(255, 215, 110, .45); }'
+            + '::highlight(grazer-find-current) { background: #ff9f2e;'
+            + ' color: #000; }');
 
-    function enterFindMode() {
-        const box = document.createElement('input');
-        box.placeholder = 'Find in page…';
-        box.style.cssText =
-            'position:fixed;top:10px;right:10px;z-index:2147483647;'
-            + 'width:200px;padding:6px 10px;'
-            + 'font:13px -apple-system,sans-serif;'
-            + 'color:#111;background:#fff;border:1px solid #999;'
-            + 'border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.25);'
-            + 'outline:none;';
+        const barSheet = new CSSStyleSheet();
+        barSheet.replaceSync(`
+            .bar { display: flex; align-items: center; gap: 8px;
+                   padding: 7px 8px 7px 12px;
+                   font: 13px -apple-system, BlinkMacSystemFont, sans-serif;
+                   background: rgba(24, 24, 28, .96);
+                   border: 1px solid rgba(255, 255, 255, .12);
+                   border-radius: 10px;
+                   box-shadow: 0 8px 28px rgba(0, 0, 0, .45); }
+            input { width: 200px; padding: 0; font: inherit; color: #f2f2f5;
+                    background: transparent; border: none; outline: none; }
+            input::placeholder { color: rgba(255, 255, 255, .35); }
+            .bar.none input { color: #e0645c; }
+            .count { color: rgba(255, 255, 255, .45); font-size: 11px;
+                     white-space: nowrap; }
+            .close { padding: 2px 5px; font: inherit; line-height: 1;
+                     color: rgba(255, 255, 255, .35); background: none;
+                     border: none; cursor: pointer; }
+            .close:hover { color: #fff; }`);
 
-        // Enter searches (n/N continue), Escape cancels. The global handler
-        // ignores keys while an input has focus, and its Escape-blurs-inputs
-        // rule triggers the blur cleanup below.
-        box.addEventListener('keydown', event => {
-            event.stopPropagation();
+        let bar = null;
+        let query = '';
+        let matches = [];
+        let current = -1;
 
-            if (event.key === 'Enter') {
-                lastFind = box.value;
-                box.remove();
-                findNext(false);
-            } else if (event.key === 'Escape') {
-                box.remove();
+        function pattern(text) {
+            const source = text.trim()
+                .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                .replace(/\s+/g, '\\s+');
+            const ignoreCase = text === text.toLowerCase();
+            return source ? new RegExp(source, ignoreCase ? 'gi' : 'g') : null;
+        }
+
+        // Matches inside one text node; one split across elements is missed.
+        function search(text) {
+            const regex = pattern(text);
+            const found = [];
+
+            if (!regex)
+                return found;
+
+            const seen = new Map();
+            const visible = el => {
+                if (!seen.has(el))
+                    seen.set(el, !el.closest(
+                            'script, style, noscript, template, textarea')
+                        && (el.checkVisibility?.({visibilityProperty: true})
+                            ?? true));
+                return seen.get(el);
+            };
+
+            const walker = document.createTreeWalker(
+                document.body ?? document.documentElement,
+                NodeFilter.SHOW_TEXT);
+
+            for (let node; (node = walker.nextNode())
+                     && found.length < maxMatches;) {
+                if (!node.parentElement || !visible(node.parentElement))
+                    continue;
+
+                for (const match of node.data.matchAll(regex)) {
+                    const range = new Range();
+                    range.setStart(node, match.index);
+                    range.setEnd(node, match.index + match[0].length);
+                    found.push(range);
+
+                    if (found.length >= maxMatches)
+                        break;
+                }
             }
-        });
 
-        box.addEventListener('blur', () => box.remove());
-        document.documentElement.appendChild(box);
-        box.focus();
-    }
+            return found;
+        }
+
+        // The first match at or after `anchor` (a range), else the first one
+        // on screen -- so typing more never jumps back past the current hit.
+        function startIndex(anchor) {
+            if (anchor?.startContainer.isConnected) {
+                const i = matches.findIndex(range =>
+                    range.compareBoundaryPoints(Range.START_TO_START, anchor)
+                        >= 0);
+                if (i >= 0)
+                    return i;
+            }
+
+            const i = matches.findIndex(
+                range => range.getBoundingClientRect().bottom > 0);
+            return Math.max(i, 0);
+        }
+
+        function run(anchor) {
+            matches = search(query);
+            current = matches.length ? startIndex(anchor) : -1;
+            paint();
+            reveal();
+        }
+
+        function paint() {
+            if (window.CSS?.highlights) {
+                if (!document.adoptedStyleSheets.includes(pageSheet))
+                    document.adoptedStyleSheets =
+                        [...document.adoptedStyleSheets, pageSheet];
+
+                const now = new Highlight(...(current >= 0
+                    ? [matches[current]] : []));
+                now.priority = 1;
+                CSS.highlights.set('grazer-find', new Highlight(...matches));
+                CSS.highlights.set('grazer-find-current', now);
+            }
+
+            if (!bar)
+                return;
+
+            const total = matches.length;
+            bar.count.textContent = total
+                ? `${current + 1} of ${total}${total >= maxMatches ? '+' : ''}`
+                : query.trim() ? 'No matches' : '';
+            bar.box.classList.toggle('none', !total && !!query.trim());
+        }
+
+        // Scroll the current match into view, clear of the bar.
+        function reveal() {
+            const range = matches[current];
+
+            if (!range)
+                return;
+
+            range.startContainer.parentElement?.scrollIntoView(
+                {block: 'nearest', inline: 'nearest'});
+
+            const rect = range.getBoundingClientRect();
+            if (rect.top < 60 || rect.bottom > innerHeight - 20)
+                scrollBy(0, rect.top - innerHeight / 3);
+        }
+
+        function step(backwards) {
+            if (!query.trim())
+                return;
+
+            // Closed (highlights cleared) or the page changed under us: search
+            // again from where the reader is, and land on that.
+            if (!matches.length || !matches[0].startContainer.isConnected) {
+                run(null);
+                return;
+            }
+
+            const total = matches.length;
+            current = (current + (backwards ? -1 : 1) + total) % total;
+            paint();
+            reveal();
+        }
+
+        function build() {
+            const host = document.createElement('grazer-find');
+            host.style.cssText = 'all:initial;position:fixed;top:10px;'
+                + 'right:14px;z-index:2147483647;';
+
+            const root = host.attachShadow({mode: 'closed'});
+            root.adoptedStyleSheets = [barSheet];
+
+            const box = document.createElement('div');
+            box.className = 'bar';
+
+            const input = document.createElement('input');
+            input.placeholder = 'Find in page';
+            input.spellcheck = false;
+            input.addEventListener('input', () => {
+                query = input.value;
+                run(matches[current]);
+            });
+
+            const count = document.createElement('span');
+            count.className = 'count';
+
+            const close = document.createElement('button');
+            close.className = 'close';
+            close.title = 'Close (Esc)';
+            close.textContent = '✕';
+            close.addEventListener('click', () => api.close());
+
+            box.append(input, count, close);
+            root.append(box);
+            document.documentElement.appendChild(host);
+            return {host, box, input, count};
+        }
+
+        const api = {
+            open() {
+                if (!bar) {
+                    bar = build();
+                    bar.input.value = query;
+
+                    if (query.trim())
+                        run(null);
+                }
+
+                bar.input.focus();
+                bar.input.select();
+            },
+
+            next: () => step(false),
+            previous: () => step(true),
+
+            close() {
+                bar?.host.remove();
+                bar = null;
+                matches = [];
+                current = -1;
+                CSS.highlights?.delete('grazer-find');
+                CSS.highlights?.delete('grazer-find-current');
+            },
+
+            isOpen: () => bar !== null,
+
+            // The bar's input has focus. Its shadow root is closed, so the
+            // page only ever sees the host as the focused element.
+            hasFocus: () => bar !== null && document.activeElement === bar.host,
+
+            // Keys typed into the bar. The page never sees them: its own
+            // shortcuts would fire, since to the page the target isn't an
+            // input. Typing itself is the default action and goes through.
+            handleKey(event) {
+                event.stopImmediatePropagation();
+
+                if (event.isComposing || event.metaKey || event.ctrlKey
+                    || event.altKey)
+                    return;
+
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    api.close();
+                } else if (event.key === 'Enter') {
+                    event.preventDefault();
+                    step(event.shiftKey);
+                }
+            },
+        };
+
+        return api;
+    })();
+
+    window.__grazerFind = find;
 
     // --- Link hints ('f') ------------------------------------------------
 
@@ -204,6 +427,11 @@ static constexpr auto vimiumScript = R"JS(
             return;
         }
 
+        if (find.hasFocus()) {
+            find.handleKey(event);
+            return;
+        }
+
         if (event.metaKey || event.ctrlKey || event.altKey)
             return;
 
@@ -217,6 +445,12 @@ static constexpr auto vimiumScript = R"JS(
         if (isEditable(document.activeElement)) {
             if (event.key === 'Escape')
                 document.activeElement.blur();
+            return;
+        }
+
+        if (event.key === 'Escape' && find.isOpen()) {
+            event.preventDefault();
+            find.close();
             return;
         }
 
@@ -249,5 +483,11 @@ static constexpr auto vimiumScript = R"JS(
 
         pending = '';
     }, true);
+
+    for (const type of ['keypress', 'keyup'])
+        addEventListener(type, event => {
+            if (find.hasFocus())
+                event.stopImmediatePropagation();
+        }, true);
 })();
 )JS";

@@ -840,6 +840,20 @@ struct BrowserView final : View
             view.reload();
     }
 
+    // Cmd+F / Cmd+G / Shift-Cmd+G: drive the page's find bar (see the find
+    // section of PageScript.h). Opening it focuses the page first, so its
+    // input really takes the keyboard.
+    void findInPage(const std::string& call)
+    {
+        if (activeTab == nullptr || paletteOpen)
+            return;
+
+        if (call == "open()")
+            activeTab->view().focusContent();
+
+        activeTab->view().evaluateJavaScript("window.__grazerFind?." + call);
+    }
+
     // A page-side notification for events with no chrome of their own
     // (finished downloads, etc.).
     void showToast(Tab& tab, const std::string& message)
@@ -972,8 +986,9 @@ struct GrazerApp
 {
     GrazerApp()
     {
-        AppMenu::install([this](bool bypassCache)
-                         { view.reloadActiveTab(bypassCache); });
+        AppMenu::install(
+            {.reload = [this](bool bypassCache) { view.reloadActiveTab(bypassCache); },
+             .find = [this](const std::string& call) { view.findInPage(call); }});
         view.onToggleMaximize = [this] { window.toggleMaximize(); };
         view.onActivateWindow = [this]
         {
