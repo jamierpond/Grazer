@@ -409,12 +409,21 @@ struct BrowserView final : View
             syncPalette();
         };
 
-        view.onNavigationFinished = [this, t](const std::string&)
+        // The page the navigation landed on: server redirects (a sign-in hop
+        // back to the page, /r to /r/week) never start a navigation of their
+        // own, so without this the tab keeps the URL it was sent to.
+        view.onNavigationFinished = [this, t](const std::string& url)
         {
             if (t == activeTab && !paletteOpen)
                 t->view().focusContent();
 
             updateChromeNav();
+
+            if (url.starts_with("http") && !t->failed && url != t->url)
+            {
+                t->url = url;
+                syncPalette();
+            }
         };
 
         view.onNavigationFailed = [this, t](const std::string& error)
