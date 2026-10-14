@@ -9,6 +9,7 @@
 #include "PageScript.h"
 #include "Palette.h"
 #include "Places.h"
+#include "ReloadFromOrigin.h"
 #include "Session.h"
 #include "TabMatch.h"
 #include "Types.h"
@@ -820,6 +821,25 @@ struct BrowserView final : View
             cycleTab(-1);
     }
 
+    // --- Menu shortcuts ---------------------------------------------------------
+
+    // Cmd+R / Shift-Cmd+R. A failed tab is showing the error page loadHTML put
+    // there, so it retries its URL rather than reloading that.
+    void reloadActiveTab(bool bypassCache)
+    {
+        if (activeTab == nullptr || paletteOpen)
+            return;
+
+        auto& view = activeTab->view();
+
+        if (activeTab->failed)
+            view.loadURL(activeTab->url);
+        else if (bypassCache)
+            reloadFromOrigin(view);
+        else
+            view.reload();
+    }
+
     // A page-side notification for events with no chrome of their own
     // (finished downloads, etc.).
     void showToast(Tab& tab, const std::string& message)
@@ -952,7 +972,8 @@ struct GrazerApp
 {
     GrazerApp()
     {
-        AppMenu::install();
+        AppMenu::install([this](bool bypassCache)
+                         { view.reloadActiveTab(bypassCache); });
         view.onToggleMaximize = [this] { window.toggleMaximize(); };
         view.onActivateWindow = [this]
         {

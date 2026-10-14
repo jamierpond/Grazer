@@ -8,7 +8,7 @@ namespace AppMenu
 // The Edit menu is load-bearing: macOS only delivers Cmd+X/C/V/A to the
 // focused view (the palette input, page fields) by matching them against
 // the menu bar -- without it, paste is dead everywhere.
-void install()
+void install(std::function<void(bool bypassCache)> reload)
 {
     using namespace eacp::Graphics;
 
@@ -17,6 +17,12 @@ void install()
     bar.add(standardEditMenu());
 
     auto viewMenu = Menu {"View"};
+    viewMenu.add(MenuItem::withAction(
+        "Reload Page", [reload] { reload(false); }, commandKey("r")));
+    viewMenu.add(MenuItem::withAction("Reload Ignoring Cache",
+                                      [reload] { reload(true); },
+                                      commandShiftKey("r")));
+    viewMenu.addSeparator();
     viewMenu.add(MenuItem::withAction(
         "Zoom In", WebHelpers::zoomInFocusedWebView, commandKey("+")));
     viewMenu.add(MenuItem::withAction(

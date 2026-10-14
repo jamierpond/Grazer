@@ -82,13 +82,15 @@ target_link_libraries(Grazer PRIVATE GrazerBrowser)
 # implements: the menu bar (AppMenu), what makes a web view a browser's
 # (BrowserEngine), a terminal for the CLI modes (Console), and the URLs the OS
 # hands Grazer -- kAEGetURL on macOS, the command line on Windows (OpenUrls).
+# Reloading a page past the cache is macOS-only (ReloadFromOrigin).
 if (APPLE)
     enable_language(OBJCXX)
     target_sources(Grazer PRIVATE
             Source/AppMenu-macOS.mm
             Source/BrowserEngine-macOS.mm
             Source/Console-macOS.mm
-            Source/OpenUrls-macOS.mm)
+            Source/OpenUrls-macOS.mm
+            Source/ReloadFromOrigin-macOS.mm)
 elseif (WIN32)
     target_sources(Grazer PRIVATE
             Source/AppMenu-Windows.cpp
