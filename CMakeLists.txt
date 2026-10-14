@@ -29,6 +29,21 @@ CPMAddPackage(
 
 list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 
+# Publishes Wim's tabs to Rudder (the app switcher) as contexts, so a tab is
+# one search away from anywhere. Only the client library is built. Optional:
+# without a Rudder checkout Wim builds, and behaves, exactly as before.
+set(WIM_RUDDER_REPOSITORY "$ENV{HOME}/projects/Rudder"
+        CACHE STRING "Git repository CPM fetches Rudder's client library from")
+
+if (APPLE AND (EXISTS "${WIM_RUDDER_REPOSITORY}" OR CPM_Rudder_SOURCE))
+    CPMAddPackage(
+            NAME Rudder
+            GIT_REPOSITORY ${WIM_RUDDER_REPOSITORY}
+            GIT_TAG main
+            OPTIONS "RUDDER_CLIENT_ONLY ON"
+    )
+endif ()
+
 # Wim's browser logic (URL/omnibox parsing, places, history, session,
 # palette ranking) lives in a plain static library so it stays unit-testable
 # without the app shell. Types.h (the palette wire types) is shared with the
@@ -60,6 +75,11 @@ eacp_add_webview_app(Wim
         REACT)
 
 target_link_libraries(Wim PRIVATE WimBrowser)
+
+if (TARGET RudderClient)
+    target_link_libraries(Wim PRIVATE RudderClient)
+    target_compile_definitions(Wim PRIVATE WIM_RUDDER=1)
+endif ()
 
 if (NOT TARGET NanoTest)
     CPMAddPackage(

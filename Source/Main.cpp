@@ -16,6 +16,10 @@
 #include <eacp/WebView/WebView/JsStringLiteral.h>
 #include <emberstore/AppDatabase.h>
 
+#if WIM_RUDDER
+#include <RudderClient.h>
+#endif
+
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -91,6 +95,7 @@ struct BrowserView final : View
 
         addChildren({content, chromeBar});
         setupControl();
+        setupRudder();
         restoreSession();
     }
 
@@ -122,6 +127,69 @@ struct BrowserView final : View
         {
         }
     }
+
+    // --- Rudder ---------------------------------------------------------------
+
+    // Wim's tabs are contexts in Rudder, the app switcher: a tab is a search
+    // away from anywhere, and picking one lands here. Silent when Rudder isn't
+    // running; a no-op where the client isn't built.
+    void setupRudder()
+    {
+#if WIM_RUDDER
+        rudder.emplace(rudder::protocol::Hello {"Wim", "com.pond.wim", 0});
+        rudder->onActivate = [this](const std::string& contextId)
+        {
+            try
+            {
+                focusTabById(std::stoll(contextId));
+            }
+            catch (const std::exception&)
+            {
+            }
+        };
+#endif
+    }
+
+    // Tabs change in bursts (a navigation is a start, a title, a finish), so
+    // the push waits for the end of the event loop turn and goes once.
+    void scheduleRudderPush()
+    {
+#if WIM_RUDDER
+        if (rudderPushPending)
+            return;
+
+        rudderPushPending = true;
+        Threads::callAsync(
+            [this]
+            {
+                rudderPushPending = false;
+                pushTabsToRudder();
+            });
+#endif
+    }
+
+#if WIM_RUDDER
+    void pushTabsToRudder()
+    {
+        auto contexts = std::vector<rudder::protocol::Context> {};
+
+        for (auto& tab: tabs)
+        {
+            auto context = rudder::protocol::Context {};
+            context.id = std::to_string(tab->id);
+            context.title = tab->title.empty() ? tab->url : tab->title;
+            context.subtitle = tab->url;
+            context.url = tab->url;
+            contexts.push_back(std::move(context));
+        }
+
+        if (contexts == pushedToRudder)
+            return;
+
+        pushedToRudder = contexts;
+        rudder->pushContexts(std::move(contexts));
+    }
+#endif
 
     Control::TabList buildTabList()
     {
@@ -579,6 +647,7 @@ struct BrowserView final : View
         publishResults();
         saveSession();
         updateChromeNav();
+        scheduleRudderPush();
     }
 
     void updateChromeNav()
@@ -771,6 +840,12 @@ struct BrowserView final : View
 
     // The CLI control plane. controlServer is last on purpose: it must be torn
     // down before the bridge and api it dispatches into.
+#if WIM_RUDDER
+    std::optional<rudder::RudderClient> rudder;
+    std::vector<rudder::protocol::Context> pushedToRudder;
+    bool rudderPushPending = false;
+#endif
+
     Control::ControlApi controlApi;
     Miro::Bridge controlBridge;
     std::optional<IPC::RpcServer> controlServer;
