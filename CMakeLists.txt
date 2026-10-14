@@ -30,15 +30,14 @@ CPMAddPackage(
 list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 
 # Publishes Wim's tabs to Rudder (the app switcher) as contexts, so a tab is
-# one search away from anywhere. Only the client library is built. Optional:
-# without a Rudder checkout Wim builds, and behaves, exactly as before.
-set(WIM_RUDDER_REPOSITORY "$ENV{HOME}/projects/Rudder"
-        CACHE STRING "Git repository CPM fetches Rudder's client library from")
-
-if (APPLE AND (EXISTS "${WIM_RUDDER_REPOSITORY}" OR CPM_Rudder_SOURCE))
+# one search away from anywhere. Only Rudder's client library is built; Wim
+# behaves exactly as before when Rudder isn't running. Work against a local
+# Rudder checkout with:
+#   cmake -B build -DCPM_Rudder_SOURCE=$HOME/projects/Rudder
+if (APPLE)
     CPMAddPackage(
             NAME Rudder
-            GIT_REPOSITORY ${WIM_RUDDER_REPOSITORY}
+            GITHUB_REPOSITORY jamierpond/Rudder
             GIT_TAG main
             OPTIONS "RUDDER_CLIENT_ONLY ON"
     )
