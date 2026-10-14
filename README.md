@@ -51,6 +51,7 @@ just install   # Release build into /Applications
 just icon      # regenerate Assets/Icon from Source.png
 ```
 
-Some WebView APIs Grazer uses haven't landed on
+On macOS, some WebView APIs Grazer uses haven't landed on
 [eacp](https://github.com/jamierpond/eacp) `main` yet; build against a local
-checkout with `-DCPM_eacp_SOURCE=$HOME/path/to/eacp`.
+checkout with `-DCPM_eacp_SOURCE=$HOME/path/to/eacp`. Windows builds against
+`main`.
