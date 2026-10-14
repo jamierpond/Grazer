@@ -140,13 +140,18 @@ struct BrowserView final : View
         rudder.emplace(rudder::protocol::Hello {"Wim", "audio.pond.wim", 0});
         rudder->onActivate = [this](const std::string& contextId)
         {
-            try
-            {
-                focusTabById(std::stoll(contextId));
-            }
-            catch (const std::exception&)
-            {
-            }
+            if (auto id = rudderTabId(contextId))
+                focusTabById(*id);
+        };
+
+        // Rudder previewing a tab: show it, but never activate Wim or raise
+        // the window -- Rudder raises Wim itself while the row is selected,
+        // and a raise from here would land late, over wherever the user went.
+        rudder->onPreview = [this](const std::string& contextId)
+        {
+            if (auto id = rudderTabId(contextId))
+                if (auto* tab = findTab(*id))
+                    showTab(*tab);
         };
 #endif
     }
@@ -170,6 +175,18 @@ struct BrowserView final : View
     }
 
 #if WIM_RUDDER
+    static std::optional<std::int64_t> rudderTabId(const std::string& contextId)
+    {
+        try
+        {
+            return std::stoll(contextId);
+        }
+        catch (const std::exception&)
+        {
+            return std::nullopt;
+        }
+    }
+
     void pushTabsToRudder()
     {
         auto contexts = std::vector<rudder::protocol::Context> {};
@@ -217,13 +234,20 @@ struct BrowserView final : View
         if (tab == nullptr)
             return {false, "no open tab with id " + std::to_string(id)};
 
+        mru.touch(normalizeURL(tab->url));
+        showTab(*tab);
+        onActivateWindow();
+        return {true, ""};
+    }
+
+    // Switches to the tab without bringing Wim forward. An open palette
+    // would preview its selection right back over it.
+    void showTab(Tab& tab)
+    {
         if (paletteOpen)
             hidePalette();
 
-        mru.touch(normalizeURL(tab->url));
-        switchTo(*tab);
-        onActivateWindow();
-        return {true, ""};
+        switchTo(tab);
     }
 
     Control::Ack openUrlFromControl(const std::string& text)
