@@ -247,6 +247,17 @@ struct BrowserView final : View
         return {true, ""};
     }
 
+    // Keys back to whatever was taking them -- the palette input, else the
+    // page. Raising the window on Windows leaves focus on the window itself,
+    // so a raised Grazer took no keys until clicked.
+    void focusKeys()
+    {
+        if (paletteOpen)
+            paletteWeb.focusContent();
+        else if (activeTab != nullptr)
+            activeTab->view().focusContent();
+    }
+
     // Switches to the tab without bringing Grazer forward. An open palette
     // would preview its selection right back over it.
     void showTab(Tab& tab)
@@ -900,7 +911,11 @@ struct GrazerApp
     {
         AppMenu::install();
         view.onToggleMaximize = [this] { window.toggleMaximize(); };
-        view.onActivateWindow = [this] { window.toFront(); };
+        view.onActivateWindow = [this]
+        {
+            window.toFront();
+            view.focusKeys();
+        };
         window.setContentView(view);
         window.toggleMaximize();
 
