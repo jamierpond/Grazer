@@ -11,15 +11,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(cmake/CPM.cmake)
 
-# grazer-media-permissions is eacp's develop plus the camera/mic prompt and
-# two open PRs Grazer needs on Windows: #141 (keys reach the focused view) and
-# #143 (GlobalHotKey::isAvailable). Move back to develop once they merge. Work against a local eacp checkout
-# with:
+# eacp's `grazer` branch is develop with the open PRs Grazer needs merged in:
+# #146 (browser options), #147 (downloads, external links), #148 (camera/mic
+# prompt), #141 (keys reach the focused view) and #143
+# (GlobalHotKey::isAvailable). Move back to develop once they merge. Work
+# against a local eacp checkout with:
 #   cmake -B build -DCPM_eacp_SOURCE=$HOME/projects/eacp
 CPMAddPackage(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
-        GIT_TAG grazer-media-permissions
+        GIT_TAG grazer
 )
 
 # Local persistence (Firestore-flavoured JSON documents). Must come after
