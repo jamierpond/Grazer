@@ -454,6 +454,16 @@ static constexpr auto vimiumScriptSource = R"JS(
             return;
         }
 
+        // Ctrl+W closes the tab, the same way: Cmd+W is the menu's on macOS.
+        if (!navigator.platform.startsWith('Mac') && event.ctrlKey
+            && !event.metaKey && !event.altKey && !event.shiftKey
+            && event.key.toLowerCase() === 'w') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            post('closeTab');
+            return;
+        }
+
         if (find.hasFocus()) {
             find.handleKey(event);
             return;

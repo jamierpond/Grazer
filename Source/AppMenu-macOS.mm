@@ -18,6 +18,8 @@ void install(Window& window, Actions actions)
     auto fileMenu = Menu {"File"};
     fileMenu.add(MenuItem::withAction(
         "New Window", [actions] { actions.newWindow(); }, commandKey("n")));
+    fileMenu.add(MenuItem::withAction(
+        "Close Tab", [actions] { actions.closeTab(); }, commandKey("w")));
     bar.add(std::move(fileMenu));
 
     auto editMenu = standardEditMenu();

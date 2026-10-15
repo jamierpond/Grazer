@@ -23,6 +23,9 @@ struct Actions
     // Ctrl+N there (see PageScript.h).
     std::function<void()> newWindow;
 
+    // File > Close Tab (Cmd+W); Ctrl+W in the page on Windows, as above.
+    std::function<void()> closeTab;
+
     // View > Zoom In / Zoom Out / Actual Size zoom this: the front window's
     // page. Not WebView::focused, which can be the chrome bar or palette.
     std::function<eacp::Graphics::WebView*()> activePage;

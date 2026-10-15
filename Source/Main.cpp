@@ -87,6 +87,9 @@ struct Browser
     // The user closed `window`: drop it, or quit if it's the last one.
     void closeWindow(BrowserWindow& window);
 
+    // Windows not yet closed.
+    int openWindowCount() const;
+
     // Where menu shortcuts and URLs from outside land: the window last
     // brought forward.
     BrowserWindow* frontWindow();
@@ -387,11 +390,24 @@ struct BrowserView final : View
         saveSession();
     }
 
+    // Cmd+W, Ctrl+W on Windows, x in the page. Deferred: the page's own
+    // message handler may be what's running.
+    void closeActiveTab()
+    {
+        Threads::callAsync([this] { closeTab(activeTab); });
+    }
+
+    // Closing a window's last tab closes the window, as browsers do -- unless
+    // it's the only window, which gets a fresh home tab instead: a tab
+    // close never quits Grazer.
     void closeTab(Tab* tab)
     {
         auto index = tabs.getIndexOfItem(tab);
 
         if (index < 0)
+            return;
+
+        if (tabs.size() == 1 && onCloseLastTab())
             return;
 
         auto wasActive = tab == activeTab;
@@ -699,7 +715,7 @@ struct BrowserView final : View
                 toggleBookmark(activeTab->title, activeTab->url);
         }
         else if (command == "closeTab")
-            Threads::callAsync([this] { closeTab(activeTab); });
+            closeActiveTab();
         else if (command == "nextTab")
             cycleTab(1);
         else if (command == "prevTab")
@@ -838,6 +854,10 @@ struct BrowserView final : View
     // bar zooms to fill the workspace, like a native titlebar.
     std::function<void()> onToggleMaximize = [] {};
 
+    // The window's last tab is closing: close the window instead, if it
+    // isn't the only one. True when it did.
+    std::function<bool()> onCloseLastTab = [] { return false; };
+
     Browser& browser;
     Api::GrazerApi api;
     PlacesStore& places = browser.places;
@@ -871,6 +891,15 @@ struct BrowserWindow
         : browser(browserToUse)
     {
         view.onToggleMaximize = [this] { window.toggleMaximize(); };
+        view.onCloseLastTab = [this]
+        {
+            if (browser.openWindowCount() <= 1)
+                return false;
+
+            window.setVisible(false);
+            browser.closeWindow(*this);
+            return true;
+        };
         window.events.onActivationChanged = [this](bool isKey)
         {
             if (isKey && !closed)
@@ -961,14 +990,16 @@ BrowserWindow& Browser::openWindow(const WindowSession& state)
 
 // The window has closed by the time this runs (on macOS this is its
 // windowWillClose), so it's only destroyed once that has unwound.
+int Browser::openWindowCount() const
+{
+    return (int) std::count_if(
+        windows.begin(), windows.end(), [](auto& each) { return !each->closed; });
+}
+
 void Browser::closeWindow(BrowserWindow& window)
 {
-    auto open = std::count_if(windows.begin(),
-                              windows.end(),
-                              [](auto& each) { return !each->closed; });
-
     // The last window's tabs stay in the session for the next launch.
-    if (open <= 1)
+    if (openWindowCount() <= 1)
     {
         Apps::quit();
         return;
@@ -1225,6 +1256,12 @@ struct GrazerApp
                      window->view.findInPage(call);
              },
              .newWindow = [this] { browser.openWindow({}); },
+             .closeTab =
+                 [this]
+             {
+                 if (auto* window = browser.frontWindow())
+                     window->view.closeActiveTab();
+             },
              .activePage = [this]() -> WebView*
              {
                  auto* window = browser.frontWindow();
