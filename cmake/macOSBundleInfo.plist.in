@@ -46,5 +46,9 @@
 	<string>${MACOSX_BUNDLE_COPYRIGHT}</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Web sites you allow can use the camera, for things like video calls.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Web sites you allow can use the microphone, for things like video calls.</string>
 </dict>
 </plist>

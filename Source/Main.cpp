@@ -878,6 +878,9 @@ struct BrowserView final : View
         auto options = WebView::Options();
         options.statusBar = false;
         BrowserEngine::configure(options);
+
+        // Sites ask before they get the camera or mic, like any browser.
+        options.promptForMediaCapture = true;
         return options;
     }
 
@@ -989,6 +992,7 @@ struct GrazerApp
     GrazerApp()
     {
         AppMenu::install(
+            window,
             {.reload = [this](bool bypassCache) { view.reloadActiveTab(bypassCache); },
              .find = [this](const std::string& call) { view.findInPage(call); }});
         view.onToggleMaximize = [this] { window.toggleMaximize(); };

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <eacp/WebView/WebView.h>
+
 #include <functional>
 #include <string>
 
@@ -19,6 +21,6 @@ struct Actions
 };
 
 // Install Grazer's menu bar. Call once the window exists.
-void install(Actions actions);
+void install(eacp::Graphics::Window& window, Actions actions);
 
 } // namespace AppMenu
