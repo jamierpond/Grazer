@@ -25,10 +25,9 @@ test:
 update-deps:
     node Scripts/update-deps.mjs
 
-[macos]
-[doc('Build Release (latest Rudder) + install to /Applications/Grazer.app; removes the old Wim.app')]
+[doc('Build Release (latest Rudder) + install: /Applications/Grazer.app, or %LOCALAPPDATA%\Programs\Grazer on Windows')]
 install:
-    node Scripts/install-macos.mjs
+    node Scripts/install.mjs
 
 [doc('Delete the build directory')]
 clean:

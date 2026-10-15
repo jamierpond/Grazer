@@ -47,9 +47,12 @@ Ninja and the Xcode tools on macOS or Visual Studio on Windows. The same
 
 ```sh
 just run       # build and launch
-just install   # Release build into /Applications
+just install   # Release build into /Applications, or %LOCALAPPDATA%\Programs\Grazer
 just icon      # regenerate Assets/Icon from Source.png
 ```
+
+On Windows, `just install` also adds Desktop and Start Menu shortcuts and
+registers Grazer as a browser; pick it under Settings > Default apps.
 
 On macOS, some WebView APIs Grazer uses haven't landed on
 [eacp](https://github.com/jamierpond/eacp) `main` yet; build against a local
