@@ -11,12 +11,15 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(cmake/CPM.cmake)
 
-# Work against a local eacp checkout with:
+# jp/windows-apps is eacp's develop plus two open PRs Grazer needs on Windows:
+# #141 (keys reach the focused view) and #143 (GlobalHotKey::isAvailable).
+# Move back to develop once they merge. Work against a local eacp checkout
+# with:
 #   cmake -B build -DCPM_eacp_SOURCE=$HOME/projects/eacp
 CPMAddPackage(
         NAME eacp
-        GITHUB_REPOSITORY jamierpond/eacp
-        GIT_TAG main
+        GITHUB_REPOSITORY eyalamirmusic/eacp
+        GIT_TAG jp/windows-apps
 )
 
 # Local persistence (Firestore-flavoured JSON documents). Must come after

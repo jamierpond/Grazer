@@ -54,7 +54,7 @@ just icon      # regenerate Assets/Icon from Source.png
 On Windows, `just install` also adds Desktop and Start Menu shortcuts and
 registers Grazer as a browser; pick it under Settings > Default apps.
 
-On macOS, some WebView APIs Grazer uses haven't landed on
-[eacp](https://github.com/jamierpond/eacp) `main` yet; build against a local
-checkout with `-DCPM_eacp_SOURCE=$HOME/path/to/eacp`. Windows builds against
-`main`.
+Grazer builds against [eacp](https://github.com/eyalamirmusic/eacp)'s
+`jp/windows-apps` branch: `develop` plus two open PRs. On macOS, some WebView
+APIs Grazer uses haven't landed in eacp yet; build against a local checkout
+with `-DCPM_eacp_SOURCE=$HOME/path/to/eacp`.
