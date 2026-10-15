@@ -18,6 +18,10 @@ struct Actions
     // Edit > Find... / Find Next / Find Previous (Cmd+F, Cmd+G, Shift-Cmd+G):
     // the find bar call to run in the page -- "open()", "next()", "previous()".
     std::function<void(const std::string& call)> find;
+
+    // File > New Window (Cmd+N). Windows has no menu bar; the page takes
+    // Ctrl+N there (see PageScript.h).
+    std::function<void()> newWindow;
 };
 
 // Install Grazer's menu bar. Call once the window exists.

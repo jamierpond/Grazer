@@ -443,6 +443,17 @@ static constexpr auto vimiumScriptSource = R"JS(
             return;
         }
 
+        // Ctrl+N: a new window. macOS takes Cmd+N in the menu bar; Windows
+        // has none, so the page takes it.
+        if (!navigator.platform.startsWith('Mac') && event.ctrlKey
+            && !event.metaKey && !event.altKey && !event.shiftKey
+            && event.key.toLowerCase() === 'n') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            post('newWindow');
+            return;
+        }
+
         if (find.hasFocus()) {
             find.handleKey(event);
             return;

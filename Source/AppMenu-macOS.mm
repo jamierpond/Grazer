@@ -15,6 +15,11 @@ void install(Window& window, Actions actions)
     auto bar = MenuBar {};
     bar.add(standardApplicationMenu("Grazer"));
 
+    auto fileMenu = Menu {"File"};
+    fileMenu.add(MenuItem::withAction(
+        "New Window", [actions] { actions.newWindow(); }, commandKey("n")));
+    bar.add(std::move(fileMenu));
+
     auto editMenu = standardEditMenu();
     editMenu.addSeparator();
     editMenu.add(MenuItem::withAction(

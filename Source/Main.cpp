@@ -71,9 +71,72 @@ struct Tab
     bool failed = false;
 };
 
+struct BrowserWindow;
+
+// What every window shares: the profile's stores, the tab ids, the session,
+// and the CLI control plane and Rudder link, which see every window's tabs.
+// Each window has its own tabs, palette and chrome (BrowserView).
+struct Browser
+{
+    // Restores the last session's windows (or opens one) and starts serving
+    // the control plane and Rudder.
+    void start();
+
+    BrowserWindow& openWindow(const WindowSession& state);
+
+    // The user closed `window`: drop it, or quit if it's the last one.
+    void closeWindow(BrowserWindow& window);
+
+    // Where menu shortcuts and URLs from outside land: the window last
+    // brought forward.
+    BrowserWindow* frontWindow();
+
+    void saveSession();
+
+    void setupControl();
+    void setupRudder();
+    void scheduleRudderPush();
+    static std::optional<std::int64_t> rudderTabId(const std::string& contextId);
+    void pushTabsToRudder();
+    Control::TabList buildTabList();
+    std::pair<BrowserWindow*, Tab*> findTab(std::int64_t id);
+    Control::Ack focusTabById(std::int64_t id);
+    Control::Ack openUrlFromControl(const std::string& text);
+
+    emberstore::Database durable {emberstore::appDataDirectory(
+                                      "pond", snapshotMode ? "GrazerSnapshot" : "Grazer"),
+                                  emberstore::Durability::Durable};
+    emberstore::Database atomic {durable.directory(),
+                                 emberstore::Durability::Atomic};
+    PlacesStore places {durable};
+    SitesStore sites {durable};
+    MruStore mru {atomic};
+    HistoryStore history {atomic};
+    SessionStore session {atomic};
+    std::int64_t nextTabId = 0;
+
+    // While the session's windows are being reopened, so the session isn't
+    // saved with only the ones made so far.
+    bool restoring = false;
+
+    EA::OwnedVector<BrowserWindow> windows;
+    BrowserWindow* activeWindow = nullptr;
+
+    std::optional<rudder::RudderClient> rudder;
+    std::vector<rudder::protocol::Context> pushedToRudder;
+    bool rudderPushPending = false;
+
+    // The CLI control plane. controlServer is last on purpose: it must be torn
+    // down before the bridge and api it dispatches into.
+    Control::ControlApi controlApi;
+    Miro::Bridge controlBridge;
+    std::optional<IPC::RpcServer> controlServer;
+};
+
 struct BrowserView final : View
 {
-    BrowserView()
+    explicit BrowserView(Browser& browserToUse)
+        : browser(browserToUse)
     {
         api.onSetQuery = [this](const std::string& text) { setPaletteQuery(text); };
         api.onMoveSelection = [this](int delta) { movePaletteSelection(delta); };
@@ -110,150 +173,6 @@ struct BrowserView final : View
         chromeBar.loadHTML(chromeBarHtml);
 
         addChildren({content, chromeBar});
-
-        if (snapshotMode)
-            return;
-
-        setupControl();
-        setupRudder();
-        restoreSession();
-    }
-
-    // --- CLI control plane ------------------------------------------------------
-
-    // Serve the singleton control channel: list / focus / open commands from a
-    // later `./Grazer --...` invocation land here. Only the lock-holding instance
-    // reaches this, so the name is ours -- but a control-plane hiccup must
-    // never take the browser down, hence the swallowed IPC::Error.
-    void setupControl()
-    {
-        controlApi.onListTabs = [this] { return buildTabList(); };
-        controlApi.onFocusTab = [this](std::int64_t id) { return focusTabById(id); };
-        controlApi.onOpenUrl = [this](const std::string& text)
-        { return openUrlFromControl(text); };
-        controlApi.onReactivate = [this]
-        {
-            onActivateWindow();
-            return Control::Ack {true, ""};
-        };
-
-        controlBridge.use(controlApi);
-
-        try
-        {
-            controlServer.emplace(Control::channelName, controlBridge);
-        }
-        catch (const IPC::Error&)
-        {
-        }
-    }
-
-    // --- Rudder ---------------------------------------------------------------
-
-    // Grazer's tabs are contexts in Rudder, the app switcher: a tab is a search
-    // away from anywhere, and picking one lands here. Silent when Rudder isn't
-    // running.
-    void setupRudder()
-    {
-        rudder.emplace(rudder::protocol::Hello {"Grazer", "audio.pond.grazer", 0});
-        rudder->onActivate = [this](const std::string& contextId)
-        {
-            if (auto id = rudderTabId(contextId))
-                focusTabById(*id);
-        };
-
-        // Rudder previewing a tab: show it, but never activate Grazer or raise
-        // the window -- Rudder raises Grazer itself while the row is selected,
-        // and a raise from here would land late, over wherever the user went.
-        rudder->onPreview = [this](const std::string& contextId)
-        {
-            if (auto id = rudderTabId(contextId))
-                if (auto* tab = findTab(*id))
-                    showTab(*tab);
-        };
-    }
-
-    // Tabs change in bursts (a navigation is a start, a title, a finish), so
-    // the push waits for the end of the event loop turn and goes once.
-    void scheduleRudderPush()
-    {
-        if (rudderPushPending)
-            return;
-
-        rudderPushPending = true;
-        Threads::callAsync(
-            [this]
-            {
-                rudderPushPending = false;
-                pushTabsToRudder();
-            });
-    }
-
-    static std::optional<std::int64_t> rudderTabId(const std::string& contextId)
-    {
-        try
-        {
-            return std::stoll(contextId);
-        }
-        catch (const std::exception&)
-        {
-            return std::nullopt;
-        }
-    }
-
-    void pushTabsToRudder()
-    {
-        if (!rudder)
-            return;
-
-        auto contexts = std::vector<rudder::protocol::Context> {};
-
-        for (auto& tab: tabs)
-        {
-            auto context = rudder::protocol::Context {};
-            context.id = std::to_string(tab->id);
-            context.title = tab->title.empty() ? tab->url : tab->title;
-            context.subtitle = tab->url;
-            context.url = tab->url;
-            contexts.push_back(std::move(context));
-        }
-
-        if (contexts == pushedToRudder)
-            return;
-
-        pushedToRudder = contexts;
-        rudder->pushContexts(std::move(contexts));
-    }
-
-    Control::TabList buildTabList()
-    {
-        auto list = Control::TabList {};
-
-        for (auto& tab: tabs)
-        {
-            auto info = Control::TabInfo {};
-            info.id = tab->id;
-            info.title = tab->title.empty() ? tab->url : tab->title;
-            info.url = tab->url;
-            info.active = tab.get() == activeTab;
-            info.failed = tab->failed;
-            list.tabs.push_back(std::move(info));
-        }
-
-        return list;
-    }
-
-    Control::Ack focusTabById(std::int64_t id)
-    {
-        auto* tab = findTab(id);
-
-        if (tab == nullptr)
-            return {false, "no open tab with id " + std::to_string(id)};
-
-        mru.touch(normalizeURL(tab->url));
-        showTab(*tab);
-        onActivateWindow();
-        return {true, ""};
     }
 
     // Keys back to whatever was taking them -- the palette input, else the
@@ -275,33 +194,6 @@ struct BrowserView final : View
             hidePalette();
 
         switchTo(tab);
-    }
-
-    Control::Ack openUrlFromControl(const std::string& text)
-    {
-        if (text.empty())
-            return {false, "no url given"};
-
-        // An open palette would preview its selection right back over the
-        // new tab.
-        if (paletteOpen)
-            hidePalette();
-
-        // A page already open is switched to rather than loaded again: links
-        // from other apps and Rudder's favourites land on the tab they made
-        // last time.
-        auto url = navigationURL(text);
-
-        if (auto* open = openTabFor(url))
-        {
-            mru.touch(normalizeURL(open->url));
-            switchTo(*open);
-        }
-        else
-            openTab(url);
-
-        onActivateWindow();
-        return {true, ""};
     }
 
     Tab* openTabFor(const std::string& url)
@@ -340,10 +232,8 @@ struct BrowserView final : View
 
     // --- Session ----------------------------------------------------------------
 
-    void restoreSession()
+    void restoreSession(const WindowSession& state)
     {
-        auto state = session.load();
-
         if (state.urls.empty())
         {
             openTab(homePage);
@@ -357,19 +247,18 @@ struct BrowserView final : View
         syncPalette();
     }
 
-    void saveSession()
+    WindowSession windowSession()
     {
-        if (snapshotMode)
-            return;
-
-        auto state = SessionState {};
+        auto state = WindowSession {};
 
         for (auto& tab: tabs)
             state.urls.push_back(tab->url);
 
         state.active = std::max(tabs.getIndexOfItem(activeTab), 0);
-        session.save(std::move(state));
+        return state;
     }
+
+    void saveSession() { browser.saveSession(); }
 
     // --- Tabs -----------------------------------------------------------------
 
@@ -749,7 +638,7 @@ struct BrowserView final : View
         publishResults();
         saveSession();
         updateChromeNav();
-        scheduleRudderPush();
+        browser.scheduleRudderPush();
     }
 
     void updateChromeNav()
@@ -820,6 +709,11 @@ struct BrowserView final : View
             cycleTab(1);
         else if (command == "prevTab")
             cycleTab(-1);
+        else if (command == "newWindow")
+        {
+            auto* shared = &browser;
+            Threads::callAsync([shared] { shared->openWindow({}); });
+        }
     }
 
     // --- Menu shortcuts ---------------------------------------------------------
@@ -939,30 +833,21 @@ struct BrowserView final : View
   };
 </script></body></html>)HTML";
 
-    // Bound by GrazerApp, which owns the Window: double-clicking the chrome bar
-    // zooms to fill the workspace, like a native titlebar.
+    // Bound by BrowserWindow, which owns the Window: double-clicking the chrome
+    // bar zooms to fill the workspace, like a native titlebar.
     std::function<void()> onToggleMaximize = [] {};
 
-    // Bound by GrazerApp: raise and activate the window. Fired when a CLI control
-    // command (focus / open / a duplicate launch) brings the browser forward.
-    std::function<void()> onActivateWindow = [] {};
-
+    Browser& browser;
     Api::GrazerApi api;
-    emberstore::Database durable {emberstore::appDataDirectory(
-                                      "pond", snapshotMode ? "GrazerSnapshot" : "Grazer"),
-                                  emberstore::Durability::Durable};
-    emberstore::Database atomic {durable.directory(),
-                                 emberstore::Durability::Atomic};
-    PlacesStore places {durable};
-    SitesStore sites {durable};
-    MruStore mru {atomic};
-    HistoryStore history {atomic};
-    SessionStore session {atomic};
+    PlacesStore& places = browser.places;
+    SitesStore& sites = browser.sites;
+    MruStore& mru = browser.mru;
+    HistoryStore& history = browser.history;
     View content;
     EA::OwnedVector<Tab> tabs;
     Tab* activeTab = nullptr;
     Tab* originTab = nullptr;
-    std::int64_t nextTabId = 0;
+    std::int64_t& nextTabId = browser.nextTabId;
     std::int64_t generation = 0;
     bool paletteOpen = false;
     bool paletteTouched = false;
@@ -975,40 +860,33 @@ struct BrowserView final : View
     WebView paletteWeb {paletteOptions()};
     WebViewBridge transport {paletteWeb};
     Threads::Timer previewTimer {[this] { handlePreviewTick(); }, 8};
-
-    std::optional<rudder::RudderClient> rudder;
-    std::vector<rudder::protocol::Context> pushedToRudder;
-    bool rudderPushPending = false;
-
-    // The CLI control plane. controlServer is last on purpose: it must be torn
-    // down before the bridge and api it dispatches into.
-    Control::ControlApi controlApi;
-    Miro::Bridge controlBridge;
-    std::optional<IPC::RpcServer> controlServer;
 };
 
-struct GrazerApp
+// One browser window: its tabs, palette and chrome, in a Window. Closing it
+// closes its tabs; the app quits with the last window.
+struct BrowserWindow
 {
-    GrazerApp()
+    BrowserWindow(Browser& browserToUse, const WindowSession& state)
+        : browser(browserToUse)
     {
-        AppMenu::install(
-            window,
-            {.reload = [this](bool bypassCache) { view.reloadActiveTab(bypassCache); },
-             .find = [this](const std::string& call) { view.findInPage(call); }});
         view.onToggleMaximize = [this] { window.toggleMaximize(); };
-        view.onActivateWindow = [this]
+        window.events.onActivationChanged = [this](bool isKey)
         {
-            window.toFront();
-            view.focusKeys();
+            if (isKey && !closed)
+                browser.activeWindow = this;
         };
+
+        view.restoreSession(state);
         window.setContentView(view);
         window.toggleMaximize();
+    }
 
-        // URLs from the OS (a link opened with Grazer, `open -b audio.pond.grazer`,
-        // `Grazer.exe <url>`) open as new tabs, like `--open-url`; ones that
-        // launched Grazer waited in the queue for this window.
-        OpenUrls::setHandler([this](const std::string& url)
-                             { view.openUrlFromControl(url); });
+    // Raise and activate the window, for when a CLI control command (focus /
+    // open / a duplicate launch) brings the browser forward.
+    void raise()
+    {
+        window.toFront();
+        view.focusKeys();
     }
 
     // Frameless chrome: the page runs edge to edge under a hidden, transparent
@@ -1036,8 +914,325 @@ struct GrazerApp
         return options;
     }
 
-    BrowserView view;
-    Window window {getOptions()};
+    WindowOptions windowOptions()
+    {
+        auto options = getOptions();
+        options.onQuit = [this] { browser.closeWindow(*this); };
+        return options;
+    }
+
+    Browser& browser;
+
+    // Set once the user closed it: it lingers until the end of the event
+    // loop turn, but is no longer part of the session.
+    bool closed = false;
+
+    BrowserView view {browser};
+    Window window {windowOptions()};
+};
+
+void Browser::start()
+{
+    setupControl();
+    setupRudder();
+
+    auto state = session.load();
+    restoring = true;
+
+    if (state.windows.empty())
+        openWindow({});
+
+    for (auto& window: state.windows)
+        openWindow(window);
+
+    restoring = false;
+    saveSession();
+}
+
+BrowserWindow& Browser::openWindow(const WindowSession& state)
+{
+    auto& window = windows.createNew(*this, state);
+    activeWindow = &window;
+    saveSession();
+    scheduleRudderPush();
+    return window;
+}
+
+// The window has closed by the time this runs (on macOS this is its
+// windowWillClose), so it's only destroyed once that has unwound.
+void Browser::closeWindow(BrowserWindow& window)
+{
+    auto open = std::count_if(windows.begin(),
+                              windows.end(),
+                              [](auto& each) { return !each->closed; });
+
+    // The last window's tabs stay in the session for the next launch.
+    if (open <= 1)
+    {
+        Apps::quit();
+        return;
+    }
+
+    window.closed = true;
+
+    if (activeWindow == &window)
+        activeWindow = nullptr;
+
+    saveSession();
+
+    Threads::callAsync(
+        [this, closing = &window]
+        {
+            windows.removeItem(*closing);
+            scheduleRudderPush();
+        });
+}
+
+BrowserWindow* Browser::frontWindow()
+{
+    if (activeWindow != nullptr)
+        return activeWindow;
+
+    for (auto& window: windows)
+        if (!window->closed)
+            return window.get();
+
+    return nullptr;
+}
+
+void Browser::saveSession()
+{
+    if (snapshotMode || restoring)
+        return;
+
+    auto state = SessionState {};
+
+    for (auto& window: windows)
+        if (!window->closed)
+            state.windows.push_back(window->view.windowSession());
+
+    session.save(std::move(state));
+}
+
+// --- CLI control plane ------------------------------------------------------
+
+// Serve the singleton control channel: list / focus / open commands from a
+// later `./Grazer --...` invocation land here. Only the lock-holding instance
+// reaches this, so the name is ours -- but a control-plane hiccup must
+// never take the browser down, hence the swallowed IPC::Error.
+void Browser::setupControl()
+{
+    controlApi.onListTabs = [this] { return buildTabList(); };
+    controlApi.onFocusTab = [this](std::int64_t id) { return focusTabById(id); };
+    controlApi.onOpenUrl = [this](const std::string& text)
+    { return openUrlFromControl(text); };
+    controlApi.onReactivate = [this]
+    {
+        if (auto* window = frontWindow())
+            window->raise();
+
+        return Control::Ack {true, ""};
+    };
+
+    controlBridge.use(controlApi);
+
+    try
+    {
+        controlServer.emplace(Control::channelName, controlBridge);
+    }
+    catch (const IPC::Error&)
+    {
+    }
+}
+
+// --- Rudder -----------------------------------------------------------------
+
+// Grazer's tabs are contexts in Rudder, the app switcher: a tab is a search
+// away from anywhere, and picking one lands here. Silent when Rudder isn't
+// running.
+void Browser::setupRudder()
+{
+    rudder.emplace(rudder::protocol::Hello {"Grazer", "audio.pond.grazer", 0});
+    rudder->onActivate = [this](const std::string& contextId)
+    {
+        if (auto id = rudderTabId(contextId))
+            focusTabById(*id);
+    };
+
+    // Rudder previewing a tab: show it, but never activate Grazer or raise
+    // the window -- Rudder raises Grazer itself while the row is selected,
+    // and a raise from here would land late, over wherever the user went.
+    rudder->onPreview = [this](const std::string& contextId)
+    {
+        if (auto id = rudderTabId(contextId))
+            if (auto [window, tab] = findTab(*id); tab != nullptr)
+                window->view.showTab(*tab);
+    };
+}
+
+// Tabs change in bursts (a navigation is a start, a title, a finish), so
+// the push waits for the end of the event loop turn and goes once.
+void Browser::scheduleRudderPush()
+{
+    if (rudderPushPending)
+        return;
+
+    rudderPushPending = true;
+    Threads::callAsync(
+        [this]
+        {
+            rudderPushPending = false;
+            pushTabsToRudder();
+        });
+}
+
+std::optional<std::int64_t> Browser::rudderTabId(const std::string& contextId)
+{
+    try
+    {
+        return std::stoll(contextId);
+    }
+    catch (const std::exception&)
+    {
+        return std::nullopt;
+    }
+}
+
+void Browser::pushTabsToRudder()
+{
+    if (!rudder)
+        return;
+
+    auto contexts = std::vector<rudder::protocol::Context> {};
+
+    for (auto& window: windows)
+    {
+        for (auto& tab: window->view.tabs)
+        {
+            auto context = rudder::protocol::Context {};
+            context.id = std::to_string(tab->id);
+            context.title = tab->title.empty() ? tab->url : tab->title;
+            context.subtitle = tab->url;
+            context.url = tab->url;
+            contexts.push_back(std::move(context));
+        }
+    }
+
+    if (contexts == pushedToRudder)
+        return;
+
+    pushedToRudder = contexts;
+    rudder->pushContexts(std::move(contexts));
+}
+
+Control::TabList Browser::buildTabList()
+{
+    auto list = Control::TabList {};
+
+    for (auto& window: windows)
+    {
+        for (auto& tab: window->view.tabs)
+        {
+            auto info = Control::TabInfo {};
+            info.id = tab->id;
+            info.title = tab->title.empty() ? tab->url : tab->title;
+            info.url = tab->url;
+            info.active = tab.get() == window->view.activeTab;
+            info.failed = tab->failed;
+            list.tabs.push_back(std::move(info));
+        }
+    }
+
+    return list;
+}
+
+std::pair<BrowserWindow*, Tab*> Browser::findTab(std::int64_t id)
+{
+    for (auto& window: windows)
+        if (auto* tab = window->view.findTab(id))
+            return {window.get(), tab};
+
+    return {nullptr, nullptr};
+}
+
+Control::Ack Browser::focusTabById(std::int64_t id)
+{
+    auto [window, tab] = findTab(id);
+
+    if (tab == nullptr)
+        return {false, "no open tab with id " + std::to_string(id)};
+
+    mru.touch(normalizeURL(tab->url));
+    window->view.showTab(*tab);
+    window->raise();
+    return {true, ""};
+}
+
+Control::Ack Browser::openUrlFromControl(const std::string& text)
+{
+    if (text.empty())
+        return {false, "no url given"};
+
+    // A page already open is switched to rather than loaded again: links
+    // from other apps and Rudder's favourites land on the tab they made
+    // last time, in whichever window it's in.
+    auto url = navigationURL(text);
+
+    for (auto& window: windows)
+    {
+        if (auto* open = window->view.openTabFor(url))
+        {
+            mru.touch(normalizeURL(open->url));
+            window->view.showTab(*open);
+            window->raise();
+            return {true, ""};
+        }
+    }
+
+    auto* window = frontWindow();
+
+    if (window == nullptr)
+        return {false, "no open window"};
+
+    // An open palette would preview its selection right back over the
+    // new tab.
+    window->view.hidePalette();
+    window->view.openTab(url);
+    window->raise();
+    return {true, ""};
+}
+
+struct GrazerApp
+{
+    GrazerApp()
+    {
+        browser.start();
+
+        // The menu bar is the app's, so its shortcuts act on the front window.
+        AppMenu::install(
+            browser.frontWindow()->window,
+            {.reload =
+                 [this](bool bypassCache)
+             {
+                 if (auto* window = browser.frontWindow())
+                     window->view.reloadActiveTab(bypassCache);
+             },
+             .find =
+                 [this](const std::string& call)
+             {
+                 if (auto* window = browser.frontWindow())
+                     window->view.findInPage(call);
+             },
+             .newWindow = [this] { browser.openWindow({}); }});
+
+        // URLs from the OS (a link opened with Grazer, `open -b audio.pond.grazer`,
+        // `Grazer.exe <url>`) open as new tabs, like `--open-url`; ones that
+        // launched Grazer waited in the queue for this window.
+        OpenUrls::setHandler([this](const std::string& url)
+                             { browser.openUrlFromControl(url); });
+    }
+
+    Browser browser;
 };
 
 // --- Snapshot ------------------------------------------------------------------
@@ -1072,7 +1267,7 @@ struct SnapshotApp
     static WindowOptions getOptions()
     {
         // Borderless, so a tiling window manager leaves its size alone.
-        auto options = GrazerApp::getOptions();
+        auto options = BrowserWindow::getOptions();
         options.flags = {};
         options.flags.add(WindowFlags::Borderless);
         options.width = 1400;
@@ -1137,7 +1332,8 @@ struct SnapshotApp
             });
     }
 
-    BrowserView view;
+    Browser browser;
+    BrowserView view {browser};
     Window window {getOptions()};
     int settledTicks = 0;
     bool scriptRan = false;

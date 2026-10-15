@@ -5,24 +5,41 @@
 
 namespace grazer
 {
+WindowSession sanitizeWindow(WindowSession window)
+{
+    std::erase_if(window.urls, [](const std::string& url) { return url.empty(); });
+
+    auto last = std::max((std::int64_t) window.urls.size() - 1, (std::int64_t) 0);
+    window.active = std::clamp(window.active, (std::int64_t) 0, last);
+
+    return window;
+}
+
 SessionState sanitizeSession(SessionState state)
 {
-    std::erase_if(state.urls, [](const std::string& url) { return url.empty(); });
+    for (auto& window: state.windows)
+        window = sanitizeWindow(std::move(window));
 
-    auto last = std::max((std::int64_t) state.urls.size() - 1, (std::int64_t) 0);
-    state.active = std::clamp(state.active, (std::int64_t) 0, last);
+    std::erase_if(state.windows,
+                  [](const WindowSession& window) { return window.urls.empty(); });
 
     return state;
 }
 
 SessionStore::SessionStore(const emberstore::Database& db)
-    : document(db.document<SessionState>("session"))
+    : document(db.document<SessionState>("windows"))
+    , singleWindowDocument(db.document<WindowSession>("session"))
 {
 }
 
 SessionState SessionStore::load()
 {
-    return sanitizeSession(document.get());
+    auto state = sanitizeSession(document.get());
+
+    if (state.windows.empty())
+        state = sanitizeSession({{singleWindowDocument.get()}});
+
+    return state;
 }
 
 void SessionStore::save(SessionState state)
