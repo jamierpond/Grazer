@@ -1084,7 +1084,7 @@ void Browser::setupControl()
 // running.
 void Browser::setupRudder()
 {
-    rudder.emplace(rudder::protocol::Hello {"Grazer", "audio.pond.grazer", 0});
+    rudder.emplace(rudder::protocol::Hello {"Grazer", "audio.pond.grazer", 0, true});
     rudder->onActivate = [this](const std::string& contextId)
     {
         if (auto id = rudderTabId(contextId))
@@ -1099,6 +1099,15 @@ void Browser::setupRudder()
         if (auto id = rudderTabId(contextId))
             if (auto [window, tab] = findTab(*id); tab != nullptr)
                 window->view.showTab(*tab);
+    };
+
+    // Rudder's close (its quit binding on a tab row): the tab closes as it
+    // would from Cmd+W, and the push that follows drops it from Rudder.
+    rudder->onClose = [this](const std::string& contextId)
+    {
+        if (auto id = rudderTabId(contextId))
+            if (auto [window, tab] = findTab(*id); tab != nullptr)
+                window->view.closeTab(tab);
     };
 }
 
