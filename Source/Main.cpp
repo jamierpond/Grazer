@@ -11,6 +11,7 @@
 #include "Places.h"
 #include "ReloadFromOrigin.h"
 #include "Session.h"
+#include "Sites.h"
 #include "TabMatch.h"
 #include "Types.h"
 #include "Url.h"
@@ -375,7 +376,7 @@ struct BrowserView final : View
     Tab& createTab(const std::string& url)
     {
         auto& tab = tabs.createNew(nextTabId++, getWebViewOptions());
-        tab.view().addUserScript(vimiumScript);
+        tab.view().addUserScript(vimiumScript(sites.excludedKeybindingsJSON()));
         tab.view().addScriptMessageHandler(
             "grazer", [this](const std::string& command) { handleCommand(command); });
 
@@ -950,6 +951,7 @@ struct BrowserView final : View
     emberstore::Database atomic {durable.directory(),
                                  emberstore::Durability::Atomic};
     PlacesStore places {durable};
+    SitesStore sites {durable};
     MruStore mru {atomic};
     HistoryStore history {atomic};
     SessionStore session {atomic};

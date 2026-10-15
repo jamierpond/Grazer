@@ -1,12 +1,18 @@
 #pragma once
 
+#include <string>
+
 // Vimium-style bindings, injected into every page at document start -- which
 // includes the native error page, so a tab whose load failed stays fully
-// drivable. Add new bindings to the `bindings` map below -- keys are keypress
-// sequences ('gg' works, as long as no binding is a strict prefix of
-// another), values run when the sequence completes. `post(command)` sends a
-// command string to the native side, handled in BrowserView::handleCommand.
-static constexpr auto vimiumScript = R"JS(
+// drivable. The page's own shortcuts win: a key the page handles (Gmail's j/k,
+// GitHub's '/') never reaches the bindings. Add new bindings to the
+// `bindings` map below -- keys are keypress sequences ('gg' works, as long as
+// no binding is a strict prefix of another), values run when the sequence
+// completes. `post(command)` sends a command string to the native side,
+// handled in BrowserView::handleCommand. Sites can opt out of bindings that
+// clash with their own shortcuts -- see SitesStore, whose JSON vimiumScript()
+// splices in for __grazerExcludedKeybindings.
+static constexpr auto vimiumScriptSource = R"JS(
 (() => {
     if (window.__grazerInstalled)
         return;
@@ -37,12 +43,22 @@ static constexpr auto vimiumScript = R"JS(
         'J': () => post('prevTab'),
         'K': () => post('nextTab'),
         'f': () => enterHintMode(),
-        '/': () => find.open(),
         'n': () => find.next(),
         'N': () => find.previous(),
     };
 
-    // --- Find in page (Cmd+F, '/') ----------------------------------------
+    // host -> keys the site keeps (SitesStore); a host covers its subdomains.
+    const excludedKeybindings = __grazerExcludedKeybindings;
+
+    function allowedHere(seq) {
+        const host = location.hostname.toLowerCase();
+        const site = Object.keys(excludedKeybindings).find(
+            site => host === site || host.endsWith('.' + site));
+        const excluded = site ? excludedKeybindings[site] : [];
+        return !excluded.some(key => key === 'all' || seq.startsWith(key));
+    }
+
+    // --- Find in page (Cmd+F) ----------------------------------------------
     //
     // A bar pinned top-right, in a closed shadow root so the page's CSS can't
     // reach it. Every match is painted with the CSS Custom Highlight API --
@@ -454,35 +470,47 @@ static constexpr auto vimiumScript = R"JS(
             return;
         }
 
-        if (event.key.length !== 1) {
+        if (event.key.length !== 1)
+            pending = '';
+    }, true);
+
+    // The bindings run on keypress, bubbling, so the page sees every key
+    // first -- on keydown and keypress, wherever it listens -- and a key it
+    // handles (preventDefault, or stopping it before window) is left alone.
+    // A page that cancels keydown gets no keypress at all.
+    addEventListener('keypress', event => {
+        if (event.defaultPrevented) {
             pending = '';
             return;
         }
 
+        if (event.metaKey || event.ctrlKey || event.altKey || hintState
+            || isEditable(document.activeElement)
+            || event.key.length !== 1)
+            return;
+
         const candidate = pending + event.key;
         clearTimeout(pendingTimer);
 
-        if (bindings[candidate]) {
+        if (bindings[candidate] && allowedHere(candidate)) {
             pending = '';
             event.preventDefault();
-            event.stopImmediatePropagation();
             bindings[candidate]();
             return;
         }
 
         const isPrefix = Object.keys(bindings)
-            .some(seq => seq.startsWith(candidate));
+            .some(seq => seq.startsWith(candidate) && allowedHere(seq));
 
         if (isPrefix) {
             pending = candidate;
             event.preventDefault();
-            event.stopImmediatePropagation();
             pendingTimer = setTimeout(() => { pending = ''; }, 800);
             return;
         }
 
         pending = '';
-    }, true);
+    });
 
     for (const type of ['keypress', 'keyup'])
         addEventListener(type, event => {
@@ -491,3 +519,11 @@ static constexpr auto vimiumScript = R"JS(
         }, true);
 })();
 )JS";
+
+inline std::string vimiumScript(const std::string& excludedKeybindingsJSON)
+{
+    auto script = std::string(vimiumScriptSource);
+    auto token = std::string("__grazerExcludedKeybindings");
+    script.replace(script.find(token), token.size(), excludedKeybindingsJSON);
+    return script;
+}

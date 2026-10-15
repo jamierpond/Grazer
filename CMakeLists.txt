@@ -55,6 +55,7 @@ add_library(GrazerBrowser STATIC
         Lib/Browser/Palette.cpp
         Lib/Browser/Places.cpp
         Lib/Browser/Session.cpp
+        Lib/Browser/Sites.cpp
         Lib/Browser/TabMatch.cpp
         Lib/Browser/Url.cpp)
 
