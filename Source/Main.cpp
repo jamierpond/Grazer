@@ -212,15 +212,10 @@ struct BrowserView final : View
     // lay out below it, never underneath. Tab webviews live inside `content`;
     // the palette is a permanently later sibling, so switching tabs never
     // touches its key focus.
-    //
-    // NOTE: root-level child coordinates are currently unflipped on macOS
-    // (same as eacp's own Browser example), so the VISUAL top band is
-    // removeFromBottom there. Windows lays out y-down.
     void resized() override
     {
         auto bounds = getLocalBounds();
-        chromeBar.setBounds(Platform::isMac() ? bounds.removeFromBottom(chromeBarHeight)
-                                              : bounds.removeFromTop(chromeBarHeight));
+        chromeBar.setBounds(bounds.removeFromTop(chromeBarHeight));
         content.setBounds(bounds);
 
         if (activeTab != nullptr)
