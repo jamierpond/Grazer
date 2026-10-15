@@ -538,6 +538,33 @@ static constexpr auto vimiumScriptSource = R"JS(
             if (find.hasFocus())
                 event.stopImmediatePropagation();
         }, true);
+
+    // --- In use -------------------------------------------------------------
+
+    // A tab on a call (camera or mic open) or playing sound is in use even
+    // while nobody looks at it: say so every minute, so tab expiry leaves it
+    // alone.
+    let captures = [];
+    const getUserMedia =
+        navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices);
+
+    if (getUserMedia)
+        navigator.mediaDevices.getUserMedia = async constraints => {
+            const stream = await getUserMedia(constraints);
+            captures.push(stream);
+            return stream;
+        };
+
+    setInterval(() => {
+        captures = captures.filter(stream =>
+            stream.getTracks().some(track => track.readyState === 'live'));
+
+        const playing = [...document.querySelectorAll('audio, video')]
+            .some(media => !media.paused && !media.muted && media.volume > 0);
+
+        if (captures.length > 0 || playing)
+            post('inUse');
+    }, 60000);
 })();
 )JS";
 

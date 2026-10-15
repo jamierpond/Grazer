@@ -79,3 +79,27 @@ auto tSanitizeDropsEmptyWindows = test("Session/sanitize drops windows with no t
     check(state.windows[0].urls[0] == "https://a.com");
     check(state.windows[0].active == 0);
 };
+
+auto tLastVisitedRoundTrips = test("Session/last-visited times round-trip") = []
+{
+    auto db = testing::freshDatabase("session-last-visited");
+    auto store = SessionStore {db};
+
+    store.save({{{{"https://a.com", "https://b.com"}, 0, {10, 20}}}});
+
+    auto restored = store.load();
+    check(restored.windows.size() == 1);
+    check(restored.windows[0].lastVisited == std::vector<std::int64_t> {10, 20});
+};
+
+auto tSanitizeKeepsLastVisitedInStep =
+    test("Session/sanitize drops a dropped URL's last-visited time with it") = []
+{
+    auto window = sanitizeWindow({{"", "https://a.com", ""}, 0, {1, 2, 3}});
+
+    check(window.urls == std::vector<std::string> {"https://a.com"});
+    check(window.lastVisited == std::vector<std::int64_t> {2});
+
+    // Out of step (a hand edit, an older session): dropped, not misapplied.
+    check(sanitizeWindow({{"https://a.com", "https://b.com"}, 0, {1}}).lastVisited.empty());
+};

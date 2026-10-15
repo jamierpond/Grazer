@@ -15,7 +15,11 @@ struct WindowSession
     std::vector<std::string> urls;
     std::int64_t active = 0;
 
-    MIRO_REFLECT(urls, active)
+    // Each tab's last-visited time (ms), in step with `urls`, so tab expiry
+    // carries over a relaunch. Empty in a session from before it existed.
+    std::vector<std::int64_t> lastVisited;
+
+    MIRO_REFLECT(urls, active, lastVisited)
 };
 
 // Every open window, in the order they were opened.
@@ -26,8 +30,9 @@ struct SessionState
     MIRO_REFLECT(windows)
 };
 
-// Drops empty URLs and clamps `active` into range, so a hand-edited or
-// corrupt session file can't restore into a broken state.
+// Drops empty URLs (and their lastVisited) and clamps `active` into range,
+// so a hand-edited or corrupt session file can't restore into a broken
+// state. lastVisited that doesn't match the URLs one for one is dropped.
 WindowSession sanitizeWindow(WindowSession window);
 
 // Sanitizes every window and drops the ones left with no tabs.

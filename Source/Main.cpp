@@ -12,6 +12,7 @@
 #include "ReloadFromOrigin.h"
 #include "Session.h"
 #include "Sites.h"
+#include "TabExpiry.h"
 #include "TabMatch.h"
 #include "Types.h"
 #include "Url.h"
@@ -30,6 +31,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -69,6 +71,9 @@ struct Tab
     std::string openedUrl;
 
     bool failed = false;
+
+    // When the user last left it, or it opened (see TabExpiry.h).
+    std::int64_t lastVisited = MruStore::nowMs();
 };
 
 struct BrowserWindow;
@@ -101,6 +106,12 @@ struct Browser
     void scheduleRudderPush();
     static std::optional<std::int64_t> rudderTabId(const std::string& contextId);
     void pushTabsToRudder();
+
+    // Closes the tabs nobody has visited for tabExpiryMs (TabExpiry.h), at
+    // the end of this event loop turn: a navigation callback may be what's
+    // running.
+    void scheduleTabExpiry();
+    void expireTabs();
     Control::TabList buildTabList();
     std::pair<BrowserWindow*, Tab*> findTab(std::int64_t id);
     Control::Ack focusTabById(std::int64_t id);
@@ -128,6 +139,10 @@ struct Browser
     std::optional<rudder::RudderClient> rudder;
     std::vector<rudder::protocol::Context> pushedToRudder;
     bool rudderPushPending = false;
+
+    bool expiryPending = false;
+    Threads::Timer expiryTimer {[this] { scheduleTabExpiry(); },
+                                Time::MS {tabSweepIntervalMs}};
 
     // The CLI control plane. controlServer is last on purpose: it must be torn
     // down before the bridge and api it dispatches into.
@@ -238,8 +253,13 @@ struct BrowserView final : View
             return;
         }
 
-        for (auto& url: state.urls)
-            createTab(url);
+        for (std::size_t i = 0; i < state.urls.size(); ++i)
+        {
+            auto& tab = createTab(state.urls[i]);
+
+            if (i < state.lastVisited.size())
+                tab.lastVisited = state.lastVisited[i];
+        }
 
         switchTo(*tabs[(int) state.active]);
         syncPalette();
@@ -250,7 +270,10 @@ struct BrowserView final : View
         auto state = WindowSession {};
 
         for (auto& tab: tabs)
+        {
             state.urls.push_back(tab->url);
+            state.lastVisited.push_back(tab->lastVisited);
+        }
 
         state.active = std::max(tabs.getIndexOfItem(activeTab), 0);
         return state;
@@ -265,7 +288,15 @@ struct BrowserView final : View
         auto& tab = tabs.createNew(nextTabId++, getWebViewOptions());
         tab.view().addUserScript(vimiumScript(sites.excludedKeybindingsJSON()));
         tab.view().addScriptMessageHandler(
-            "grazer", [this](const std::string& command) { handleCommand(command); });
+            "grazer",
+            [this, t = &tab](const std::string& command)
+            {
+                // The page is on a call or playing audio: in use, if unseen.
+                if (command == "inUse")
+                    t->lastVisited = MruStore::nowMs();
+                else
+                    handleCommand(command);
+            });
 
         wireTab(tab);
 
@@ -317,6 +348,7 @@ struct BrowserView final : View
                     mru.touch(normalizeURL(url));
             }
 
+            browser.scheduleTabExpiry();
             syncPalette();
         };
 
@@ -378,7 +410,10 @@ struct BrowserView final : View
             return;
 
         if (activeTab != nullptr)
+        {
+            activeTab->lastVisited = MruStore::nowMs();
             activeTab->view().removeFromParent();
+        }
 
         activeTab = &tab;
         content.addSubview(tab.view());
@@ -977,6 +1012,46 @@ void Browser::start()
 
     restoring = false;
     saveSession();
+
+    // Yesterday's tabs go now, not at the first sweep.
+    scheduleTabExpiry();
+}
+
+void Browser::scheduleTabExpiry()
+{
+    if (expiryPending || snapshotMode)
+        return;
+
+    expiryPending = true;
+    Threads::callAsync(
+        [this]
+        {
+            expiryPending = false;
+            expireTabs();
+        });
+}
+
+void Browser::expireTabs()
+{
+    auto visits = std::vector<TabVisit> {};
+    auto active = std::set<std::int64_t> {};
+
+    for (auto& window: windows)
+    {
+        if (window->closed)
+            continue;
+
+        if (auto* tab = window->view.activeTab)
+            active.insert(tab->id);
+
+        for (auto& tab: window->view.tabs)
+            visits.push_back({tab->id, tab->lastVisited});
+    }
+
+    // The normal close: the session, the palette and Rudder all drop it.
+    for (auto id: expiredTabs(MruStore::nowMs(), visits, active))
+        if (auto [window, tab] = findTab(id); tab != nullptr)
+            window->view.closeTab(tab);
 }
 
 BrowserWindow& Browser::openWindow(const WindowSession& state)
