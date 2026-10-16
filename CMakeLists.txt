@@ -13,8 +13,9 @@ include(cmake/CPM.cmake)
 
 # eacp's `grazer` branch is develop with the open PRs Grazer needs merged in:
 # #146 (browser options), #147 (downloads, external links), #148 (camera/mic
-# prompt), #141 (keys reach the focused view) and #143
-# (GlobalHotKey::isAvailable). Move back to develop once they merge. Work
+# prompt), #141 (keys reach the focused view), #143
+# (GlobalHotKey::isAvailable) and #152 (WebView::focused is the one with
+# focus). Move back to develop once they merge. Work
 # against a local eacp checkout with:
 #   cmake -B build -DCPM_eacp_SOURCE=$HOME/projects/eacp
 CPMAddPackage(

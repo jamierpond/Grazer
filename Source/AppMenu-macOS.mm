@@ -39,11 +39,29 @@ void install(Window& window, Actions actions)
                                       commandShiftKey("r")));
     viewMenu.addSeparator();
     viewMenu.add(MenuItem::withAction(
-        "Zoom In", WebHelpers::zoomInFocusedWebView, commandKey("+")));
+        "Zoom In",
+        [actions]
+        {
+            if (auto* page = actions.activePage())
+                page->zoomIn();
+        },
+        commandKey("+")));
     viewMenu.add(MenuItem::withAction(
-        "Zoom Out", WebHelpers::zoomOutFocusedWebView, commandKey("-")));
+        "Zoom Out",
+        [actions]
+        {
+            if (auto* page = actions.activePage())
+                page->zoomOut();
+        },
+        commandKey("-")));
     viewMenu.add(MenuItem::withAction(
-        "Actual Size", WebHelpers::resetSizedFocusedWebView, commandKey("0")));
+        "Actual Size",
+        [actions]
+        {
+            if (auto* page = actions.activePage())
+                page->resetZoom();
+        },
+        commandKey("0")));
     bar.add(std::move(viewMenu));
 
     setApplicationMenuBar(bar, window);

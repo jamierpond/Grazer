@@ -22,6 +22,10 @@ struct Actions
     // File > New Window (Cmd+N). Windows has no menu bar; the page takes
     // Ctrl+N there (see PageScript.h).
     std::function<void()> newWindow;
+
+    // View > Zoom In / Zoom Out / Actual Size zoom this: the front window's
+    // page. Not WebView::focused, which can be the chrome bar or palette.
+    std::function<eacp::Graphics::WebView*()> activePage;
 };
 
 // Install Grazer's menu bar. Call once the window exists.

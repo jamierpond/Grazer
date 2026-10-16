@@ -713,6 +713,12 @@ struct BrowserView final : View
 
     // --- Menu shortcuts ---------------------------------------------------------
 
+    // The page Cmd+plus / Cmd+minus / Cmd+0 zoom.
+    WebView* activePage()
+    {
+        return activeTab != nullptr ? &activeTab->view() : nullptr;
+    }
+
     // Cmd+R / Shift-Cmd+R. A failed tab is showing the error page loadHTML put
     // there, so it retries its URL rather than reloading that.
     void reloadActiveTab(bool bypassCache)
@@ -1218,7 +1224,12 @@ struct GrazerApp
                  if (auto* window = browser.frontWindow())
                      window->view.findInPage(call);
              },
-             .newWindow = [this] { browser.openWindow({}); }});
+             .newWindow = [this] { browser.openWindow({}); },
+             .activePage = [this]() -> WebView*
+             {
+                 auto* window = browser.frontWindow();
+                 return window != nullptr ? window->view.activePage() : nullptr;
+             }});
 
         // URLs from the OS (a link opened with Grazer, `open -b audio.pond.grazer`,
         // `Grazer.exe <url>`) open as new tabs, like `--open-url`; ones that
