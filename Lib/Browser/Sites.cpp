@@ -21,9 +21,10 @@ std::string SitesStore::excludedKeybindingsJSON()
 
 void SitesStore::seedDefaults()
 {
-    // Every binding Gmail has a shortcut on: j/k/o/u/x/r/f/n/N/l/b/d, and g
-    // for its g-then-i style jumps.
+    // Every binding Gmail has a shortcut on (j/k/u/x/r/f/n/N/l/b/d, and g
+    // for its g-then-i style jumps) except o: the palette keeps it, Gmail's
+    // o is Enter.
     collection.doc("mail.google.com")
-        .set({{"j", "k", "o", "u", "x", "r", "f", "n", "N", "l", "b", "d", "g"}});
+        .set({{"j", "k", "u", "x", "r", "f", "n", "N", "l", "b", "d", "g"}});
 }
 } // namespace grazer

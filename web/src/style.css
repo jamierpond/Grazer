@@ -21,17 +21,23 @@ body,
     --eacp-app-region: drag;
 }
 
+:root {
+    --palette-top: 14vh;
+}
+
 .backdrop {
     height: 100%;
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: flex-start;
+    padding-top: var(--palette-top);
     background: rgba(0, 0, 0, 0.35);
 }
 
 .palette {
+    flex: 0 0 auto;
     width: min(680px, calc(100vw - 60px));
-    max-height: 70vh;
+    max-height: min(70vh, calc(100vh - var(--palette-top) - 30px));
     display: flex;
     flex-direction: column;
     background: rgba(24, 24, 28, 0.96);
@@ -42,6 +48,8 @@ body,
 }
 
 .query {
+    flex: 0 0 auto;
+    height: 52px;
     padding: 15px 18px;
     font-size: 16px;
     color: #f2f2f5;
@@ -57,6 +65,7 @@ body,
 
 .items {
     list-style: none;
+    min-height: 0;
     overflow-y: auto;
 }
 

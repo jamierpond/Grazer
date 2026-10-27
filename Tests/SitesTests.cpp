@@ -16,6 +16,9 @@ auto tSeedsGmail = test("Sites/an empty store seeds Gmail's exclusions") = []
     auto gmail = store.collection.doc("mail.google.com").get();
     check(gmail.has_value());
     check(!gmail->excludeKeybindings.empty());
+
+    auto& excluded = gmail->excludeKeybindings;
+    check(std::find(excluded.begin(), excluded.end(), "o") == excluded.end());
 };
 
 auto tKeepsUserEntries = test("Sites/a store with entries is not reseeded") = []

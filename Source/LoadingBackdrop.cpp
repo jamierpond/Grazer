@@ -44,15 +44,15 @@ constexpr auto secondWarpOffsetY = 9.2f;
 constexpr auto secondWarpDriftX = 0.9f;
 constexpr auto secondWarpDriftY = -0.6f;
 
-constexpr auto abyssRed = 0.010f;
-constexpr auto abyssGreen = 0.012f;
-constexpr auto abyssBlue = 0.020f;
-constexpr auto navyRed = 0.030f;
-constexpr auto navyGreen = 0.045f;
-constexpr auto navyBlue = 0.090f;
-constexpr auto charcoalRed = 0.070f;
-constexpr auto charcoalGreen = 0.072f;
-constexpr auto charcoalBlue = 0.085f;
+constexpr auto abyssRed = 0.020f;
+constexpr auto abyssGreen = 0.024f;
+constexpr auto abyssBlue = 0.040f;
+constexpr auto navyRed = 0.060f;
+constexpr auto navyGreen = 0.090f;
+constexpr auto navyBlue = 0.190f;
+constexpr auto charcoalRed = 0.140f;
+constexpr auto charcoalGreen = 0.145f;
+constexpr auto charcoalBlue = 0.175f;
 constexpr auto navyAmountScale = 1.4f;
 constexpr auto charcoalAmountLow = 0.45f;
 constexpr auto charcoalAmountHigh = 0.95f;
@@ -61,14 +61,14 @@ constexpr auto charcoalMaximumAmount = 0.6f;
 constexpr auto sheenBandFrequency = 9.f;
 constexpr auto sheenSpeed = 0.25f;
 constexpr auto sheenSharpness = 12.f;
-constexpr auto sheenStrength = 0.06f;
+constexpr auto sheenStrength = 0.14f;
 constexpr auto sheenRed = 0.55f;
 constexpr auto sheenGreen = 0.65f;
 constexpr auto sheenBlue = 0.85f;
 
 constexpr auto vignetteInnerRadius = 0.4f;
 constexpr auto vignetteOuterRadius = 1.6f;
-constexpr auto vignetteDarkening = 0.65f;
+constexpr auto vignetteDarkening = 0.45f;
 
 constexpr auto timeWrapSeconds = 3600.0;
 
