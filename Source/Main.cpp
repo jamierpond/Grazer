@@ -4,6 +4,7 @@
 #include "Control.h"
 #include "ErrorPage.h"
 #include "History.h"
+#include "LoadingBackdrop.h"
 #include "Mru.h"
 #include "OpenUrls.h"
 #include "PageScript.h"
@@ -69,6 +70,7 @@ struct Tab
     std::string openedUrl;
 
     bool failed = false;
+    bool hasFinishedFirstLoad = false;
 };
 
 struct BrowserWindow;
@@ -221,6 +223,8 @@ struct BrowserView final : View
         if (activeTab != nullptr)
             activeTab->view().setBounds(content.getLocalBounds());
 
+        loadingBackdrop.setBounds(content.getLocalBounds());
+
         if (paletteOpen)
             paletteWeb.setBounds(getLocalBounds());
     }
@@ -334,6 +338,9 @@ struct BrowserView final : View
         // own, so without this the tab keeps the URL it was sent to.
         view.onNavigationFinished = [this, t](const std::string& url)
         {
+            t->hasFinishedFirstLoad = true;
+            updateLoadingBackdrop();
+
             if (t == activeTab && !paletteOpen)
                 t->view().focusContent();
 
@@ -380,11 +387,21 @@ struct BrowserView final : View
         activeTab = &tab;
         content.addSubview(tab.view());
         tab.view().setBounds(content.getLocalBounds());
+        updateLoadingBackdrop();
 
         if (!paletteOpen)
             tab.view().focusContent();
 
         saveSession();
+    }
+
+    // A fresh tab's webview paints flat grey until its first page finishes.
+    void updateLoadingBackdrop()
+    {
+        if (activeTab != nullptr && !activeTab->hasFinishedFirstLoad)
+            loadingBackdrop.showOver(content);
+        else
+            loadingBackdrop.hide();
     }
 
     void closeTab(Tab* tab)
@@ -845,6 +862,7 @@ struct BrowserView final : View
     MruStore& mru = browser.mru;
     HistoryStore& history = browser.history;
     View content;
+    LoadingBackdrop loadingBackdrop;
     EA::OwnedVector<Tab> tabs;
     Tab* activeTab = nullptr;
     Tab* originTab = nullptr;

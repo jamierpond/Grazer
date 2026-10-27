@@ -1,11 +1,15 @@
-// Build Release + install to /Applications/Grazer.app.
+// Build Release + install to ~/.local/libexec/grazer/Grazer.app, with a
+// ~/.local/bin/grazer launcher script that opens it through LaunchServices.
 //
 // The new bundle is copied next to the old one first, then swapped in by
-// rename, so /Applications never holds a half-copied Grazer. A running installed
+// rename, so the install dir never holds a half-copied Grazer. A running installed
 // Grazer is asked to quit first (and reopened after); dev builds are left alone.
-// LaunchServices is pointed at the installed copy and told to forget the
-// build*/Grazer.app bundles, so `open -b audio.pond.grazer` and apps that open URLs
-// "with" Grazer (Rudder favourites) land on /Applications.
+// LaunchServices is pointed at the installed copy and told to forget every
+// other Grazer bundle (dev builds in any checkout), so `open -b
+// audio.pond.grazer` and apps that open URLs "with" Grazer (Rudder favourites) land on the ~/.local copy.
+//
+// Grazer used to install to /Applications/Grazer.app; that copy is quit,
+// unregistered and removed.
 //
 // Grazer was called Wim (audio.pond.wim, before that com.pond.wim). The old
 // /Applications/Wim.app is quit and removed, and every bundle LaunchServices
@@ -16,14 +20,20 @@
 // The Release tree is always reconfigured, so CPM refetches branch-pinned
 // packages (Rudder@main) and the install has the latest Rudder client.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
-import { rm, rename } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, rm, rename, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { RELEASE_BUILD_DIR, ROOT, cpmSourceArgs, main, run } from './lib.mjs';
+import { RELEASE_BUILD_DIR, cpmSourceArgs, main, run } from './lib.mjs';
 
-const APP = '/Applications/Grazer.app';
-const STAGING = '/Applications/.Grazer.app.installing';
-const OLD = '/Applications/.Grazer.app.old';
+const LOCAL_PREFIX = join(homedir(), '.local');
+const INSTALL_DIR = join(LOCAL_PREFIX, 'libexec', 'grazer');
+const COMMAND_DIR = join(LOCAL_PREFIX, 'bin');
+const APP = join(INSTALL_DIR, 'Grazer.app');
+const STAGING = join(INSTALL_DIR, '.Grazer.app.installing');
+const OLD = join(INSTALL_DIR, '.Grazer.app.old');
+const COMMAND_LAUNCHER = join(COMMAND_DIR, 'grazer');
+const PREVIOUS_LOCATION_APP = '/Applications/Grazer.app';
 const OLD_NAME_APP = '/Applications/Wim.app';
 const OLD_BUNDLE_IDS = ['audio.pond.wim', 'com.pond.wim'];
 const LSREGISTER =
@@ -34,6 +44,29 @@ function bundleId(app) {
   return execFileSync('/usr/libexec/PlistBuddy',
     ['-c', 'Print :CFBundleIdentifier', join(app, 'Contents/Info.plist')],
     { encoding: 'utf8' }).trim();
+}
+
+const COMMAND_LAUNCHER_FILE_MODE = 0o755;
+
+// A plain launch goes through LaunchServices, not the bundle's executable, so
+// macOS makes the app (not the terminal) the responsible process for TCC
+// prompts and grants. Any argument execs the executable directly instead:
+// control flags (--open-url, --list-open-tabs, --focus-tab) and --snapshot are
+// short-lived clients that print to this terminal and need no TCC grant.
+function describeCommandLauncherScript(appBundlePath) {
+  const appExecutablePath = join(appBundlePath, 'Contents', 'MacOS', 'Grazer');
+  return [
+    '#!/bin/sh',
+    `[ "$#" -gt 0 ] && exec ${JSON.stringify(appExecutablePath)} "$@"`,
+    `exec open -a ${JSON.stringify(appBundlePath)}`,
+    '',
+  ].join('\n');
+}
+
+async function writeCommandLauncher(launcherPath, appBundlePath) {
+  await rm(launcherPath, { force: true });
+  await writeFile(launcherPath, describeCommandLauncherScript(appBundlePath),
+    { mode: COMMAND_LAUNCHER_FILE_MODE });
 }
 
 // Gracefully quit (a quit Apple event, like Cmd+Q) whatever runs from `app`,
@@ -91,14 +124,19 @@ function registeredPaths(ids) {
   return [...paths];
 }
 
+async function quitUnregisterAndRemoveBundle(app) {
+  if (!existsSync(app))
+    return;
+
+  await quitInstalled(app);
+  await run(LSREGISTER, ['-u', app], { stdio: 'ignore' }).catch(() => {});
+  await rm(app, { recursive: true, force: true });
+  console.log(`Removed ${app}`);
+}
+
 // Quit and remove /Applications/Wim.app, then unregister every Wim bundle.
 async function removeOldName() {
-  if (existsSync(OLD_NAME_APP)) {
-    await quitInstalled(OLD_NAME_APP);
-    await run(LSREGISTER, ['-u', OLD_NAME_APP], { stdio: 'ignore' }).catch(() => {});
-    await rm(OLD_NAME_APP, { recursive: true, force: true });
-    console.log(`Removed ${OLD_NAME_APP}`);
-  }
+  await quitUnregisterAndRemoveBundle(OLD_NAME_APP);
 
   for (const path of registeredPaths(OLD_BUNDLE_IDS))
     await run(LSREGISTER, ['-u', path], { stdio: 'ignore' }).catch(() => {});
@@ -112,6 +150,8 @@ await main(async () => {
 
   await run('cmake', ['--build', RELEASE_BUILD_DIR, '--target', 'Grazer']);
 
+  await mkdir(INSTALL_DIR, { recursive: true });
+  await mkdir(COMMAND_DIR, { recursive: true });
   await rm(STAGING, { recursive: true, force: true });
   await run('ditto', [join(RELEASE_BUILD_DIR, 'Grazer.app'), STAGING]);
 
@@ -123,7 +163,11 @@ await main(async () => {
 
   await removeOldName();
 
-  const wasRunning = await quitInstalled();
+  const previousLocationWasRunning = existsSync(PREVIOUS_LOCATION_APP)
+    && await quitInstalled(PREVIOUS_LOCATION_APP);
+  await quitUnregisterAndRemoveBundle(PREVIOUS_LOCATION_APP);
+
+  const wasRunning = await quitInstalled() || previousLocationWasRunning;
 
   await rm(OLD, { recursive: true, force: true });
 
@@ -133,15 +177,15 @@ await main(async () => {
   await rename(STAGING, APP);
   await rm(OLD, { recursive: true, force: true });
 
+  await writeCommandLauncher(COMMAND_LAUNCHER, APP);
+
   await run(LSREGISTER, ['-f', APP]);
 
-  for (const dir of readdirSync(ROOT).filter((name) => name.startsWith('build'))) {
-    const dev = join(ROOT, dir, 'Grazer.app');
+  const otherRegisteredGrazerBundles = registeredPaths([bundleId(APP)])
+    .filter((path) => path !== APP);
 
-    // Fails (-10814) for a bundle LaunchServices never saw; that's fine.
-    if (existsSync(dev))
-      await run(LSREGISTER, ['-u', dev], { stdio: 'ignore' }).catch(() => {});
-  }
+  for (const path of otherRegisteredGrazerBundles)
+    await run(LSREGISTER, ['-u', path], { stdio: 'ignore' }).catch(() => {});
 
   if (wasRunning)
     await run('open', [APP]);

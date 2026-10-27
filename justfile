@@ -25,7 +25,7 @@ test:
 update-deps:
     node Scripts/update-deps.mjs
 
-[doc('Build Release (latest Rudder) + install: /Applications/Grazer.app, or %LOCALAPPDATA%\Programs\Grazer on Windows')]
+[doc('Build Release (latest Rudder) + install: ~/.local/libexec/grazer/Grazer.app (+ ~/.local/bin/grazer), or %LOCALAPPDATA%\Programs\Grazer on Windows')]
 install:
     node Scripts/install.mjs
 

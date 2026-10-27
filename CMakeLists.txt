@@ -70,7 +70,7 @@ set(EACP_MACOS_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/macOSBundleInfo.plist.in
         CACHE INTERNAL "eacp macOS bundle Info.plist template")
 
 eacp_add_webview_app(Grazer
-        SOURCES     Source/Main.cpp
+        SOURCES     Source/Main.cpp Source/LoadingBackdrop.cpp
         API         Api::GrazerApi
         API_HEADER  ${CMAKE_CURRENT_SOURCE_DIR}/Source/Types.h
         WEB_DIR     ${CMAKE_CURRENT_SOURCE_DIR}/web
@@ -79,7 +79,7 @@ eacp_add_webview_app(Grazer
         BUNDLE_NAME "Grazer"
         REACT)
 
-target_link_libraries(Grazer PRIVATE GrazerBrowser)
+target_link_libraries(Grazer PRIVATE GrazerBrowser eacp-gpu)
 
 # The per-platform halves of the app, each beside the shared header it
 # implements: the menu bar (AppMenu), what makes a web view a browser's
