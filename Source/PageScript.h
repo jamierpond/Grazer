@@ -47,6 +47,8 @@ static constexpr auto vimiumScriptSource = R"JS(
         'N': () => find.previous(),
     };
 
+    const paletteKeys = ['o', 't'];
+
     // host -> keys the site keeps (SitesStore); a host covers its subdomains.
     const excludedKeybindings = __grazerExcludedKeybindings;
 
@@ -478,6 +480,17 @@ static constexpr auto vimiumScriptSource = R"JS(
         if (event.key === 'Escape' && find.isOpen()) {
             event.preventDefault();
             find.close();
+            return;
+        }
+
+        // Gmail cancels keydown for keys it has shortcuts on, so the keypress
+        // the bindings run on never comes: the palette's keys go here, ahead
+        // of the page, unless the site keeps them.
+        if (!pending && paletteKeys.includes(event.key)
+            && allowedHere(event.key)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            bindings[event.key]();
             return;
         }
 
