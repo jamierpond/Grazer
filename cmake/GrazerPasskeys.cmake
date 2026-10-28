@@ -93,11 +93,6 @@ function(grazer_enable_passkeys target bundle_id)
     configure_file("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/Grazer.entitlements.in"
             "${entitlements}" @ONLY)
 
-    # The browser entitlement's review criteria want the app registered for
-    # http/https.
-    set_target_properties(${target} PROPERTIES
-            MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/GrazerInfo.plist.in")
-
     # Re-sign the whole bundle after the linker's ad-hoc signature: the profile
     # has to be in place first because the signature seals it.
     add_custom_command(TARGET ${target} POST_BUILD

@@ -20,6 +20,24 @@ void receive(std::string url)
     else
         pending.push_back(std::move(url));
 }
+
+NSString* const webLocationExtension = @"webloc";
+NSString* const webLocationUrlKey = @"URL";
+
+// A .webloc is a plist holding the link it stands for; open that, not the file.
+NSString* getUrlToOpenForFile(NSURL* fileUrl)
+{
+    if ([fileUrl.pathExtension isEqualToString:webLocationExtension])
+    {
+        auto* webLocation = [NSDictionary dictionaryWithContentsOfURL:fileUrl];
+        auto* linkedUrl = webLocation[webLocationUrlKey];
+
+        if ([linkedUrl isKindOfClass:[NSString class]])
+            return linkedUrl;
+    }
+
+    return fileUrl.absoluteString;
+}
 } // namespace
 } // namespace OpenUrls
 
@@ -35,6 +53,21 @@ void receive(std::string url)
 
     if (url.length > 0)
         OpenUrls::receive(url.UTF8String);
+}
+
+- (void)handleOpenDocuments:(NSAppleEventDescriptor*)event
+             withReplyEvent:(NSAppleEventDescriptor*)reply
+{
+    auto* documents = [event paramDescriptorForKeyword:keyDirectObject];
+    auto* documentList = [documents coerceToDescriptorType:typeAEList];
+
+    for (NSInteger index = 1; index <= documentList.numberOfItems; ++index)
+    {
+        auto* fileUrl = [documentList descriptorAtIndex:index].fileURLValue;
+
+        if (fileUrl != nil)
+            OpenUrls::receive(OpenUrls::getUrlToOpenForFile(fileUrl).UTF8String);
+    }
 }
 
 @end
@@ -60,6 +93,11 @@ void listen()
                           andSelector:@selector(handleGetUrl:withReplyEvent:)
                         forEventClass:kInternetEventClass
                            andEventID:kAEGetURL];
+                  [[NSAppleEventManager sharedAppleEventManager]
+                      setEventHandler:receiver
+                          andSelector:@selector(handleOpenDocuments:withReplyEvent:)
+                        forEventClass:kCoreEventClass
+                           andEventID:kAEOpenDocuments];
                 }];
 
     [[NSNotificationCenter defaultCenter]
