@@ -1,4 +1,5 @@
 #include "AppMenu.h"
+#include "DefaultBrowser.h"
 
 #include <eacp/WebView/WebView.h>
 
@@ -7,23 +8,6 @@
 namespace AppMenu
 {
 using namespace eacp::Graphics;
-
-// macOS asks the user to confirm each scheme; an app can't switch silently.
-void askToBecomeDefaultBrowser()
-{
-    if (@available(macOS 12, *))
-    {
-        auto* workspace = [NSWorkspace sharedWorkspace];
-        auto* grazerBundleUrl = [NSBundle mainBundle].bundleURL;
-
-        for (NSString* scheme in @[ @"https", @"http" ])
-        {
-            [workspace setDefaultApplicationAtURL:grazerBundleUrl
-                             toOpenURLsWithScheme:scheme
-                                completionHandler:^(NSError*) {}];
-        }
-    }
-}
 
 // The Edit menu is load-bearing: macOS only delivers Cmd+X/C/V/A to the
 // focused view (the palette input, page fields) by matching them against
@@ -39,7 +23,7 @@ void install(Window& window, Actions actions)
         "New Window", [actions] { actions.newWindow(); }, commandKey("n")));
     fileMenu.addSeparator();
     fileMenu.add(MenuItem::withAction("Make Grazer the Default Browser…",
-                                      [] { askToBecomeDefaultBrowser(); }));
+                                      [] { DefaultBrowser::askToBecomeDefaultBrowser(); }));
     bar.add(std::move(fileMenu));
 
     auto editMenu = standardEditMenu();

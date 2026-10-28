@@ -6,6 +6,7 @@ add_executable(GrazerTests
         PaletteTests.cpp
         PlacesTests.cpp
         SessionTests.cpp
+        SettingsTests.cpp
         SitesTests.cpp
         TabMatchTests.cpp
         UrlTests.cpp)

@@ -1,4 +1,5 @@
 #include "AppMenu.h"
+#include "DefaultBrowser.h"
 #include "BrowserEngine.h"
 #include "Console.h"
 #include "Control.h"
@@ -12,6 +13,7 @@
 #include "Places.h"
 #include "ReloadFromOrigin.h"
 #include "Session.h"
+#include "Settings.h"
 #include "Sites.h"
 #include "TabMatch.h"
 #include "Types.h"
@@ -83,6 +85,7 @@ struct Browser
     // Restores the last session's windows (or opens one) and starts serving
     // the control plane and Rudder.
     void start();
+    void offerToBecomeDefaultBrowser();
 
     BrowserWindow& openWindow(const WindowSession& state);
 
@@ -112,6 +115,7 @@ struct Browser
                                  emberstore::Durability::Atomic};
     PlacesStore places {durable};
     SitesStore sites {durable};
+    SettingsStore settings {durable};
     MruStore mru {atomic};
     HistoryStore history {atomic};
     SessionStore session {atomic};
@@ -966,6 +970,25 @@ void Browser::start()
 
     restoring = false;
     saveSession();
+
+    // Deferred so the restored windows are on screen behind the alert.
+    Threads::callAsync([this] { offerToBecomeDefaultBrowser(); });
+}
+
+void Browser::offerToBecomeDefaultBrowser()
+{
+#if __APPLE__
+    if (snapshotMode || DefaultBrowser::isDefaultBrowser())
+        return;
+
+    if (settings.hasDeclinedDefaultBrowserOffer())
+        return;
+
+    if (DefaultBrowser::hasUserAcceptedDefaultBrowserOffer())
+        DefaultBrowser::askToBecomeDefaultBrowser();
+    else
+        settings.recordDeclinedDefaultBrowserOffer();
+#endif
 }
 
 BrowserWindow& Browser::openWindow(const WindowSession& state)
