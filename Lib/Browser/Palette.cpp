@@ -10,6 +10,14 @@ namespace grazer
 {
 namespace
 {
+constexpr auto tightPerLetter = 4;
+
+int letterCount(const std::string& query)
+{
+    return (int) std::count_if(
+        query.begin(), query.end(), [](char character) { return character != ' '; });
+}
+
 bool containsURL(const std::vector<GoItem>& items, const std::string& normalizedUrl)
 {
     return std::any_of(items.begin(),
@@ -65,14 +73,15 @@ std::vector<GoItem> rankPalette(const std::vector<GoItem>& all,
 
     auto scored = std::vector<std::pair<int, const GoItem*>> {};
 
-    // score > 0 is the "really hit" bar: full-subsequence matches spread
-    // thin across a long title/URL go negative on gap penalties and
-    // shouldn't outrank the search row.
+    // A hit needs about half the per-letter score of a consecutive run: letters
+    // scattered through a long URL still score above 0 off '/', '.', '&' boundaries.
+    auto minimumHitScore = tightPerLetter * letterCount(query);
+
     for (auto& item: candidates)
     {
         auto score = fuzzyScore(query, item.title + " " + item.url);
 
-        if (score && *score > 0)
+        if (score && *score >= minimumHitScore)
             scored.push_back({*score, &item});
     }
 

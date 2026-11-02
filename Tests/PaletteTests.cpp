@@ -205,3 +205,56 @@ auto tSearchRowNeverDuplicated =
     check(ranked.size() == 1);
     check(ranked.front().isSearch);
 };
+
+namespace
+{
+std::vector<HistoryEntry> someGoogleSignInHistory()
+{
+    return {{"https://accounts.google.com/ServiceLogin?access_type=offline&app_domain="
+             "https%3A%2F%2Flocalhost%3A3000&client_id=12345.apps.googleusercontent.com"
+             "&response_type=code&scope=email%20profile&state=abc",
+             "Sign in - Google Accounts",
+             100,
+             1},
+            {"https://accounts.google.com/v3/signin/identifier?continue=https%3A%2F%2F"
+             "mail.google.com%2Fmail%2Fu%2F0%2F&followup=https%3A%2F%2Fmail.google.com"
+             "&passive=1209600&service=mail&flowName=GlifWebSignIn",
+             "Sign in - Google Accounts",
+             90,
+             1},
+            {"https://accounts.google.com/o/oauth2/auth?redirect_uri=https%3A%2F%2F"
+             "developers.google.com%2Foauthplayground&prompt=consent&include_granted_scopes"
+             "=true&login_hint=user%40example.com",
+             "Sign in - Google Accounts",
+             80,
+             1}};
+}
+} // namespace
+
+auto tScatteredLettersAreNoHit =
+    test("Palette/a query only scattered through long URLs shows just the search row") = []
+{
+    auto ranked =
+        rankPalette({}, someGoogleSignInHistory(), "leopard eating faces party");
+
+    check(ranked.size() == 1);
+    check(ranked.front().isSearch);
+};
+
+auto tRealQueryStillHitsLongURLs =
+    test("Palette/a real query still lists rows with long URLs above search") = []
+{
+    auto ranked = rankPalette({}, someGoogleSignInHistory(), "sign in google");
+
+    check(ranked.size() == 4);
+    check(!ranked.front().isSearch);
+    check(ranked.back().isSearch);
+};
+
+auto tShortQueryHitsShortTitle =
+    test("Palette/a short query still hits a short title") = []
+{
+    auto ranked = rankPalette(someTabs(), {}, "git");
+
+    check(ranked.front().title == "GitHub");
+};
