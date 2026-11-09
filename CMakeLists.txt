@@ -18,7 +18,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # focus). Move back to develop once they merge. Work
 # against a local eacp checkout with:
 #   cmake -B build -DLOCKSTEP_eacp_SOURCE=$HOME/projects/eacp
-CPMAddPackage(
+lockstep_add_package(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
         GIT_TAG grazer
@@ -26,7 +26,7 @@ CPMAddPackage(
 
 # Local persistence (Firestore-flavoured JSON documents). Must come after
 # eacp -- emberstore fetches its own copy only when no eacp targets exist.
-CPMAddPackage(
+lockstep_add_package(
         NAME emberstore
         GITHUB_REPOSITORY tamber-inc/emberstore
         GIT_TAG main
@@ -39,7 +39,7 @@ list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 # behaves exactly as before when Rudder isn't running. Work against a local
 # Rudder checkout with:
 #   cmake -B build -DLOCKSTEP_Rudder_SOURCE=$HOME/projects/Rudder
-CPMAddPackage(
+lockstep_add_package(
         NAME Rudder
         GITHUB_REPOSITORY jamierpond/Rudder
         GIT_TAG main
@@ -122,7 +122,7 @@ grazer_enable_passkeys(Grazer audio.pond.grazer)
 target_link_libraries(Grazer PRIVATE RudderClient)
 
 if (NOT TARGET NanoTest)
-    CPMAddPackage(
+    lockstep_add_package(
             NAME NanoTest
             GITHUB_REPOSITORY eyalamirmusic/NanoTest
             GIT_TAG main)
