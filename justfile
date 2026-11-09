@@ -21,11 +21,11 @@ run:
 test:
     node Scripts/test.mjs
 
-[doc('Refetch branch-pinned deps (Rudder@main) in every build tree; builds nothing')]
+[doc('Move branch-pinned deps (eacp@grazer, Rudder@main, ...) to their latest commits in lockstep.lock; builds nothing')]
 update-deps:
     node Scripts/update-deps.mjs
 
-[doc('Build Release (latest Rudder) + install: ~/.local/libexec/grazer/Grazer.app (+ ~/.local/bin/grazer), or %LOCALAPPDATA%\Programs\Grazer on Windows')]
+[doc('Build Release (locked deps) + install: ~/.local/libexec/grazer/Grazer.app (+ ~/.local/bin/grazer), or %LOCALAPPDATA%\Programs\Grazer on Windows')]
 install:
     node Scripts/install.mjs
 

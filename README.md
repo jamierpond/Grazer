@@ -57,4 +57,9 @@ registers Grazer as a browser; pick it under Settings > Default apps.
 Grazer builds against [eacp](https://github.com/eyalamirmusic/eacp)'s
 `jp/windows-apps` branch: `develop` plus two open PRs. On macOS, some WebView
 APIs Grazer uses haven't landed in eacp yet; build against a local checkout
-with `-DCPM_eacp_SOURCE=$HOME/path/to/eacp`.
+with `-DLOCKSTEP_eacp_SOURCE=$HOME/path/to/eacp`.
+
+Dependencies are pinned in `lockstep.lock`. Branch-pinned ones (eacp@grazer,
+Rudder@main, emberstore@main) stay at the locked commit until
+`just update-deps` (or `lockstep update <Name>`) moves them; commit the
+rewritten lock.
