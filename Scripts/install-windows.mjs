@@ -11,12 +11,12 @@
 // http/https, so it is offered under Settings > Default apps and links open
 // in it as `Grazer.exe "<url>"`. Windows lets only the user pick the default.
 //
-// The Release tree is always reconfigured, so CPM refetches branch-pinned
-// packages (Rudder@main) and the install has the latest Rudder client.
+// Dependencies come from lockstep.lock: branch-pinned packages (Rudder@main)
+// stay at the locked commit. Run `just update-deps` first for the latest.
 import { execFileSync, spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { RELEASE_BUILD_DIR, cpmSourceArgs, main, run } from './lib.mjs';
+import { RELEASE_BUILD_DIR, sourceOverrideArgs, main, run } from './lib.mjs';
 
 const DIR = join(process.env.LOCALAPPDATA, 'Programs', 'Grazer');
 const EXE = join(DIR, 'Grazer.exe');
@@ -104,7 +104,7 @@ function registerAsBrowser() {
 }
 
 await main(async () => {
-  await run('cmake', ['-B', RELEASE_BUILD_DIR, ...cpmSourceArgs()]);
+  await run('cmake', ['-B', RELEASE_BUILD_DIR, ...sourceOverrideArgs()]);
   await run('cmake',
     ['--build', RELEASE_BUILD_DIR, '--config', 'Release', '--target', 'Grazer']);
 

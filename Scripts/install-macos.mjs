@@ -17,14 +17,14 @@
 // Wim's data (~/Library/Application Support/pond/Wim, WebKit audio.pond.wim)
 // is left alone.
 //
-// The Release tree is always reconfigured, so CPM refetches branch-pinned
-// packages (Rudder@main) and the install has the latest Rudder client.
+// Dependencies come from lockstep.lock: branch-pinned packages (Rudder@main)
+// stay at the locked commit. Run `just update-deps` first for the latest.
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, rm, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { RELEASE_BUILD_DIR, cpmSourceArgs, main, run } from './lib.mjs';
+import { RELEASE_BUILD_DIR, sourceOverrideArgs, main, run } from './lib.mjs';
 
 const LOCAL_PREFIX = join(homedir(), '.local');
 const INSTALL_DIR = join(LOCAL_PREFIX, 'libexec', 'grazer');
@@ -145,7 +145,7 @@ async function removeOldName() {
 await main(async () => {
   await run('cmake', [
     '-G', 'Ninja', '-B', RELEASE_BUILD_DIR, '-DCMAKE_BUILD_TYPE=Release',
-    ...cpmSourceArgs(),
+    ...sourceOverrideArgs(),
   ]);
 
   await run('cmake', ['--build', RELEASE_BUILD_DIR, '--target', 'Grazer']);

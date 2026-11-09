@@ -1,10 +1,10 @@
-// Refetch branch-pinned CPM packages (Rudder@main, ...) in every configured
-// build tree. Re-running configure is what makes FetchContent's update step
-// fetch and check out the branch's new head; nothing is built, so a running
-// dev Grazer isn't touched. The next `just build` / `just run` compiles it.
+// Moves branch-pinned packages (eacp@grazer, Rudder@main, ...) to their branch
+// heads: the first build tree configures in lockstep's update mode, which
+// rewrites lockstep.lock, then every tree reconfigures locked to pick it up.
+// Nothing is built, so a running dev Grazer isn't touched.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { ROOT, cpmSourceArgs, main, run } from './lib.mjs';
+import { ROOT, sourceOverrideArgs, main, run } from './lib.mjs';
 
 await main(async () => {
   // Only trees configured from this checkout: a tree left over from before a
@@ -26,8 +26,12 @@ await main(async () => {
   const trees = readdirSync(ROOT)
     .filter((name) => name.startsWith('build') && ownTree(name));
 
+  if (trees.length === 0) {
+    throw new Error('No configured build tree; run `just build` first');
+  }
+  await run('cmake', ['-B', join(ROOT, trees[0]), '-DLOCKSTEP_MODE=update']);
   for (const tree of trees) {
     console.log(`[update-deps] reconfiguring ${tree}`);
-    await run('cmake', ['-B', join(ROOT, tree), ...cpmSourceArgs()]);
+    await run('cmake', ['-B', join(ROOT, tree), '-DLOCKSTEP_MODE=locked', ...sourceOverrideArgs()]);
   }
 });

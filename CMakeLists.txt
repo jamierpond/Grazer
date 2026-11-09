@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.31)
 
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "")
 
+set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES ${CMAKE_CURRENT_LIST_DIR}/cmake/lockstep.cmake)
+
 project(Grazer VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -9,16 +11,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-include(cmake/CPM.cmake)
-
 # eacp's `grazer` branch is develop with the open PRs Grazer needs merged in:
 # #146 (browser options), #147 (downloads, external links), #148 (camera/mic
 # prompt), #141 (keys reach the focused view), #143
 # (GlobalHotKey::isAvailable) and #152 (WebView::focused is the one with
 # focus). Move back to develop once they merge. Work
 # against a local eacp checkout with:
-#   cmake -B build -DCPM_eacp_SOURCE=$HOME/projects/eacp
-CPMAddPackage(
+#   cmake -B build -DLOCKSTEP_eacp_SOURCE=$HOME/projects/eacp
+lockstep_add_package(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
         GIT_TAG grazer
@@ -26,7 +26,7 @@ CPMAddPackage(
 
 # Local persistence (Firestore-flavoured JSON documents). Must come after
 # eacp -- emberstore fetches its own copy only when no eacp targets exist.
-CPMAddPackage(
+lockstep_add_package(
         NAME emberstore
         GITHUB_REPOSITORY tamber-inc/emberstore
         GIT_TAG main
@@ -38,8 +38,8 @@ list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 # one search away from anywhere. Only Rudder's client library is built; Grazer
 # behaves exactly as before when Rudder isn't running. Work against a local
 # Rudder checkout with:
-#   cmake -B build -DCPM_Rudder_SOURCE=$HOME/projects/Rudder
-CPMAddPackage(
+#   cmake -B build -DLOCKSTEP_Rudder_SOURCE=$HOME/projects/Rudder
+lockstep_add_package(
         NAME Rudder
         GITHUB_REPOSITORY jamierpond/Rudder
         GIT_TAG main
@@ -122,7 +122,7 @@ grazer_enable_passkeys(Grazer audio.pond.grazer)
 target_link_libraries(Grazer PRIVATE RudderClient)
 
 if (NOT TARGET NanoTest)
-    CPMAddPackage(
+    lockstep_add_package(
             NAME NanoTest
             GITHUB_REPOSITORY eyalamirmusic/NanoTest
             GIT_TAG main)
