@@ -7,5 +7,6 @@ await main(async () => {
   if (!existsSync(join(BUILD_DIR, 'CMakeCache.txt')))
     await run('cmake', ['-B', BUILD_DIR, ...sourceOverrideArgs()]);
 
-  await run('cmake', ['--build', BUILD_DIR, '--config', 'Debug']);
+  await run('cmake',
+    ['--build', BUILD_DIR, '--config', 'Debug', '--target', 'Grazer']);
 });

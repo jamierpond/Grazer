@@ -22,6 +22,8 @@ lockstep_add_package(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
         GIT_TAG grazer
+        SYSTEM YES
+        EXCLUDE_FROM_ALL YES
 )
 
 # Local persistence (Firestore-flavoured JSON documents). Must come after
@@ -30,6 +32,8 @@ lockstep_add_package(
         NAME emberstore
         GITHUB_REPOSITORY tamber-inc/emberstore
         GIT_TAG main
+        SYSTEM YES
+        EXCLUDE_FROM_ALL YES
 )
 
 list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
@@ -44,6 +48,8 @@ lockstep_add_package(
         GITHUB_REPOSITORY jamierpond/Rudder
         GIT_TAG main
         OPTIONS "RUDDER_CLIENT_ONLY ON"
+        SYSTEM YES
+        EXCLUDE_FROM_ALL YES
 )
 
 # Grazer's browser logic (URL/omnibox parsing, places, history, session,
@@ -125,7 +131,9 @@ if (NOT TARGET NanoTest)
     lockstep_add_package(
             NAME NanoTest
             GITHUB_REPOSITORY eyalamirmusic/NanoTest
-            GIT_TAG main)
+            GIT_TAG main
+            SYSTEM YES
+            EXCLUDE_FROM_ALL YES)
 endif ()
 
 enable_testing()

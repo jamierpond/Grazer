@@ -9,5 +9,5 @@ await main(async () => {
       '-G', 'Ninja', '-B', BUILD_DIR, '-DCMAKE_BUILD_TYPE=Debug', ...sourceOverrideArgs(),
     ]);
 
-  await run('cmake', ['--build', BUILD_DIR]);
+  await run('cmake', ['--build', BUILD_DIR, '--target', 'Grazer']);
 });
