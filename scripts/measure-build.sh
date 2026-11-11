@@ -2,7 +2,7 @@
 # Counts the compile and link steps of each build Grazer has, then times a clean
 # app build, a rebuild with nothing changed and a rebuild after touching one file.
 #
-#   Scripts/measure-build.sh <build-dir> [source-dir] [-- extra cmake args]
+#   scripts/measure-build.sh <build-dir> [source-dir] [-- extra cmake args]
 #
 # Every count comes from a fresh configure, so <build-dir> is deleted first.
 set -euo pipefail

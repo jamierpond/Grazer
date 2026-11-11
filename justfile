@@ -1,6 +1,6 @@
 # Grazer dev command runner. Every recipe is a thin one-liner delegating to a
-# Node script in Scripts/ — the dispatchers (compile.mjs, run.mjs) pick the
-# platform variant (Scripts/<cmd>-<macos|windows>.mjs) from process.platform,
+# Node script in scripts/ — the dispatchers (build.mjs, run.mjs) pick the
+# platform variant (scripts/<cmd>-<macos|windows>.mjs) from process.platform,
 # so the same `just` commands work everywhere.
 
 set windows-shell := ["cmd.exe", "/c"]
@@ -11,32 +11,32 @@ default:
 
 [doc('Configure (if needed) + build Grazer for the current platform')]
 build:
-    node Scripts/compile.mjs
+    node scripts/build.mjs
 
 [doc('Build + launch Grazer')]
 run:
-    node Scripts/run.mjs
+    node scripts/run.mjs
 
 [doc('Build + run the unit tests in build-test/ (leaves build/ alone)')]
 test:
-    node Scripts/test.mjs
+    node scripts/test.mjs
 
 [doc('Move branch-pinned deps (eacp@grazer, Rudder@main, ...) to their latest commits in lockstep.lock; builds nothing')]
 update-deps:
-    node Scripts/update-deps.mjs
+    node scripts/update-deps.mjs
 
 [doc('Build Release (locked deps) + install: ~/.local/libexec/grazer/Grazer.app (+ ~/.local/bin/grazer), or %LOCALAPPDATA%\Programs\Grazer on Windows')]
 install:
-    node Scripts/install.mjs
+    node scripts/install.mjs
 
 [doc('Delete the build directory')]
 clean:
-    node Scripts/clean.mjs
+    node scripts/clean.mjs
 
 [doc('Run the palette UI vite dev server (configure with -DEACP_WEBVIEW_DEV=ON)')]
 web-dev:
-    node Scripts/web-dev.mjs
+    node scripts/web-dev.mjs
 
 [doc('Rebuild Assets/Icon/Icon.png + Icon.ico from Source.png (needs ImageMagick 7)')]
 icon:
-    bash Scripts/make-icons.sh
+    bash scripts/make-icons.sh

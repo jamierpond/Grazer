@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { BUILD_DIR, ROOT, main, runNode } from './lib.mjs';
 
 await main(async () => {
-  await runNode(join(ROOT, 'Scripts', 'compile-windows.mjs'));
+  await runNode(join(ROOT, 'scripts', 'build-windows.mjs'));
 
   const candidates = [join(BUILD_DIR, 'Debug', 'Grazer.exe'), join(BUILD_DIR, 'Grazer.exe')];
   const exe = candidates.find(existsSync);
