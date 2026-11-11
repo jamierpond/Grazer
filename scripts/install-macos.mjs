@@ -24,7 +24,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, rm, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { RELEASE_BUILD_DIR, sourceOverrideArgs, main, run } from './lib.mjs';
+import { RELEASE_BUILD_DIR, lockstepSourceArgs, main, run } from './lib.mjs';
 
 const LOCAL_PREFIX = join(homedir(), '.local');
 const INSTALL_DIR = join(LOCAL_PREFIX, 'libexec', 'grazer');
@@ -129,7 +129,7 @@ async function quitUnregisterAndRemoveBundle(app) {
     return;
 
   await quitInstalled(app);
-  await run(LSREGISTER, ['-u', app], { stdio: 'ignore' }).catch(() => {});
+  await run(LSREGISTER, ['-u', app], { stdio: 'ignore', allowFail: true });
   await rm(app, { recursive: true, force: true });
   console.log(`Removed ${app}`);
 }
@@ -139,13 +139,13 @@ async function removeOldName() {
   await quitUnregisterAndRemoveBundle(OLD_NAME_APP);
 
   for (const path of registeredPaths(OLD_BUNDLE_IDS))
-    await run(LSREGISTER, ['-u', path], { stdio: 'ignore' }).catch(() => {});
+    await run(LSREGISTER, ['-u', path], { stdio: 'ignore', allowFail: true });
 }
 
 await main(async () => {
   await run('cmake', [
     '-G', 'Ninja', '-B', RELEASE_BUILD_DIR, '-DCMAKE_BUILD_TYPE=Release',
-    ...sourceOverrideArgs(),
+    ...lockstepSourceArgs(),
   ]);
 
   await run('cmake', ['--build', RELEASE_BUILD_DIR, '--target', 'Grazer']);
@@ -185,7 +185,7 @@ await main(async () => {
     .filter((path) => path !== APP);
 
   for (const path of otherRegisteredGrazerBundles)
-    await run(LSREGISTER, ['-u', path], { stdio: 'ignore' }).catch(() => {});
+    await run(LSREGISTER, ['-u', path], { stdio: 'ignore', allowFail: true });
 
   if (wasRunning)
     await run('open', [APP]);

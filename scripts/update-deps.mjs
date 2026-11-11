@@ -4,7 +4,7 @@
 // Nothing is built, so a running dev Grazer isn't touched.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { ROOT, sourceOverrideArgs, main, run } from './lib.mjs';
+import { ROOT, lockstepSourceArgs, main, run } from './lib.mjs';
 
 await main(async () => {
   // Only trees configured from this checkout: a tree left over from before a
@@ -32,6 +32,6 @@ await main(async () => {
   await run('cmake', ['-B', join(ROOT, trees[0]), '-DLOCKSTEP_MODE=update']);
   for (const tree of trees) {
     console.log(`[update-deps] reconfiguring ${tree}`);
-    await run('cmake', ['-B', join(ROOT, tree), '-DLOCKSTEP_MODE=locked', ...sourceOverrideArgs()]);
+    await run('cmake', ['-B', join(ROOT, tree), '-DLOCKSTEP_MODE=locked', ...lockstepSourceArgs()]);
   }
 });

@@ -8,9 +8,9 @@ export const RELEASE_BUILD_DIR = join(ROOT, 'build-release');
 
 // lockstep source overrides from the environment, for a fresh configure: export
 // e.g. LOCKSTEP_eacp_SOURCE=$HOME/projects/eacp to build against a local checkout.
-export function sourceOverrideArgs() {
+export function lockstepSourceArgs() {
   return Object.entries(process.env)
-    .filter(([name]) => /^(LOCKSTEP|CPM)_\w+_SOURCE$/.test(name))
+    .filter(([name]) => /^LOCKSTEP_\w+_SOURCE$/.test(name))
     .map(([name, value]) => `-D${name}=${value}`);
 }
 
@@ -23,8 +23,11 @@ export function platformScript(name) {
   return join(ROOT, 'scripts', `${name}-${platform}.mjs`);
 }
 
-export function run(command, args = [], options = {}) {
+// Run a command with inherited stdio. Rejects when it can't start or exits
+// non-zero, unless `allowFail`.
+export function run(command, args = [], { allowFail = false, ...options } = {}) {
   return new Promise((resolve, reject) => {
+    const fail = (error) => (allowFail ? resolve() : reject(error));
     const child = spawn(command, args, {
       cwd: ROOT,
       stdio: 'inherit',
@@ -34,9 +37,9 @@ export function run(command, args = [], options = {}) {
     child.on('exit', (code) =>
       code === 0
         ? resolve()
-        : reject(new Error(`${command} ${args.join(' ')} exited with ${code}`)),
+        : fail(new Error(`${command} ${args.join(' ')} exited with ${code}`)),
     );
-    child.on('error', reject);
+    child.on('error', fail);
   });
 }
 
