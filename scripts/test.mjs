@@ -6,19 +6,13 @@ import { join } from 'node:path';
 import { ROOT, lockstepSourceArgs, main, run } from './lib.mjs';
 
 const TEST_DIR = join(ROOT, 'build-test');
-const windows = process.platform === 'win32';
 
 await main(async () => {
   if (!existsSync(join(TEST_DIR, 'CMakeCache.txt')))
     await run('cmake', [
-      ...(windows ? [] : ['-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Debug']),
-      '-B', TEST_DIR, ...lockstepSourceArgs(),
+      '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Debug', '-B', TEST_DIR, ...lockstepSourceArgs(),
     ]);
 
-  await run('cmake', ['--build', TEST_DIR, '--target', 'GrazerTests',
-    ...(windows ? ['--config', 'Debug'] : [])]);
-
-  await run(windows
-    ? join(TEST_DIR, 'Tests', 'Debug', 'GrazerTests.exe')
-    : join(TEST_DIR, 'Tests', 'GrazerTests'));
+  await run('cmake', ['--build', TEST_DIR, '--target', 'GrazerTests']);
+  await run(join(TEST_DIR, 'Tests', 'GrazerTests'));
 });

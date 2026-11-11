@@ -104,12 +104,15 @@ function registerAsBrowser() {
 }
 
 await main(async () => {
-  await run('cmake', ['-B', RELEASE_BUILD_DIR, ...lockstepSourceArgs()]);
-  await run('cmake',
-    ['--build', RELEASE_BUILD_DIR, '--config', 'Release', '--target', 'Grazer']);
+  await run('cmake', [
+    '-G', 'Ninja', '-B', RELEASE_BUILD_DIR, '-DCMAKE_BUILD_TYPE=Release',
+    ...lockstepSourceArgs(),
+  ]);
+
+  await run('cmake', ['--build', RELEASE_BUILD_DIR, '--target', 'Grazer']);
 
   quitInstalled();
-  copyExe(join(RELEASE_BUILD_DIR, 'Release', 'Grazer.exe'));
+  copyExe(join(RELEASE_BUILD_DIR, 'Grazer.exe'));
   addShortcuts();
   registerAsBrowser();
 
