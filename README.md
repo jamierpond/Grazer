@@ -41,13 +41,14 @@ In the palette: `^J`/`^K` move, `Enter` goes, `Esc` returns to where you were,
 
 ## Build
 
-Needs CMake 3.31+, Node.js and [just](https://github.com/casey/just), plus
-Ninja and the Xcode tools on macOS or Visual Studio on Windows. The same
-`just` recipes work on both.
+Needs CMake 3.31+, Ninja, Node.js and [just](https://github.com/casey/just),
+plus the Xcode tools on macOS or Visual Studio with the C++ workload on
+Windows. The same `just` recipes work on both.
 
 ```sh
 just run       # build and launch
-just install   # Release build into /Applications, or %LOCALAPPDATA%\Programs\Grazer
+just test      # build and run the unit tests
+just install   # Release build into ~/.local/libexec/grazer/Grazer.app (+ ~/.local/bin/grazer), or %LOCALAPPDATA%\Programs\Grazer
 just icon      # regenerate Assets/Icon from Source.png
 ```
 
@@ -55,7 +56,8 @@ On Windows, `just install` also adds Desktop and Start Menu shortcuts and
 registers Grazer as a browser; pick it under Settings > Default apps.
 
 Grazer builds against [eacp](https://github.com/eyalamirmusic/eacp)'s
-`jp/windows-apps` branch: `develop` plus two open PRs. On macOS, some WebView
+`grazer` branch: `develop` plus the open PRs Grazer needs (listed in
+CMakeLists.txt). On macOS, some WebView
 APIs Grazer uses haven't landed in eacp yet; build against a local checkout
 with `-DLOCKSTEP_eacp_SOURCE=$HOME/path/to/eacp`.
 
