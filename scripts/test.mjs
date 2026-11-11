@@ -3,7 +3,7 @@
 // test target builds.
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT, lockstepSourceArgs, main, run } from './lib.mjs';
+import { ROOT, buildTarget, lockstepSourceArgs, main, run } from './lib.mjs';
 
 const TEST_DIR = join(ROOT, 'build-test');
 
@@ -13,6 +13,6 @@ await main(async () => {
       '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Debug', '-B', TEST_DIR, ...lockstepSourceArgs(),
     ]);
 
-  await run('cmake', ['--build', TEST_DIR, '--target', 'GrazerTests']);
+  await buildTarget(TEST_DIR, 'GrazerTests');
   await run('ctest', ['--test-dir', TEST_DIR, '--output-on-failure']);
 });

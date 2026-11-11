@@ -16,7 +16,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { RELEASE_BUILD_DIR, lockstepSourceArgs, main, run } from './lib.mjs';
+import { RELEASE_BUILD_DIR, buildTarget, lockstepSourceArgs, main, run } from './lib.mjs';
 
 const DIR = join(process.env.LOCALAPPDATA, 'Programs', 'Grazer');
 const EXE = join(DIR, 'Grazer.exe');
@@ -109,7 +109,7 @@ await main(async () => {
     ...lockstepSourceArgs(),
   ]);
 
-  await run('cmake', ['--build', RELEASE_BUILD_DIR, '--target', 'Grazer']);
+  await buildTarget(RELEASE_BUILD_DIR, 'Grazer');
 
   quitInstalled();
   copyExe(join(RELEASE_BUILD_DIR, 'Grazer.exe'));

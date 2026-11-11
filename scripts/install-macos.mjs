@@ -24,7 +24,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, rm, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { RELEASE_BUILD_DIR, lockstepSourceArgs, main, run } from './lib.mjs';
+import { RELEASE_BUILD_DIR, buildTarget, lockstepSourceArgs, main, run } from './lib.mjs';
 
 const LOCAL_PREFIX = join(homedir(), '.local');
 const INSTALL_DIR = join(LOCAL_PREFIX, 'libexec', 'grazer');
@@ -152,7 +152,7 @@ await main(async () => {
     ...lockstepSourceArgs(),
   ]);
 
-  await run('cmake', ['--build', RELEASE_BUILD_DIR, '--target', 'Grazer']);
+  await buildTarget(RELEASE_BUILD_DIR, 'Grazer');
 
   await mkdir(INSTALL_DIR, { recursive: true });
   await mkdir(COMMAND_DIR, { recursive: true });

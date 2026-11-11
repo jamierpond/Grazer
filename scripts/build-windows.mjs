@@ -2,7 +2,7 @@
 // scripts/with-msvc.ps1 (the justfile does), which puts cl on PATH.
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { BUILD_DIR, lockstepSourceArgs, main, run } from './lib.mjs';
+import { BUILD_DIR, buildTarget, lockstepSourceArgs, main, run } from './lib.mjs';
 
 await main(async () => {
   if (!existsSync(join(BUILD_DIR, 'build.ninja')))
@@ -10,5 +10,5 @@ await main(async () => {
       '-G', 'Ninja', '-B', BUILD_DIR, '-DCMAKE_BUILD_TYPE=Debug', ...lockstepSourceArgs(),
     ]);
 
-  await run('cmake', ['--build', BUILD_DIR, '--target', 'Grazer']);
+  await buildTarget(BUILD_DIR, 'Grazer');
 });

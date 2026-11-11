@@ -86,6 +86,15 @@ export function run(command, args = [], { allowFail = false, ...options } = {}) 
   });
 }
 
+// On a terminal Ninja overwrites one status line; TERM=dumb prints every step on its own line, as in CI.
+const LINE_PER_STEP_ENVIRONMENT = { TERM: 'dumb', CLICOLOR_FORCE: '1' };
+
+export function buildTarget(buildDirectory, target) {
+  return run('cmake', ['--build', buildDirectory, '--target', target], {
+    env: { ...process.env, ...LINE_PER_STEP_ENVIRONMENT },
+  });
+}
+
 export function runNode(script, args = []) {
   return run(process.execPath, [script, ...args]);
 }
