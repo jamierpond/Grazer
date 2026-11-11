@@ -142,6 +142,10 @@ async function removeOldName() {
     await run(LSREGISTER, ['-u', path], { stdio: 'ignore', allowFail: true });
 }
 
+// --keep-running: swap the bundle in without quitting a running Grazer, which
+// picks the new build up on its next launch.
+const keepRunning = process.argv.includes('--keep-running');
+
 await main(async () => {
   await run('cmake', [
     '-G', 'Ninja', '-B', RELEASE_BUILD_DIR, '-DCMAKE_BUILD_TYPE=Release',
@@ -167,7 +171,9 @@ await main(async () => {
     && await quitInstalled(PREVIOUS_LOCATION_APP);
   await quitUnregisterAndRemoveBundle(PREVIOUS_LOCATION_APP);
 
-  const wasRunning = await quitInstalled() || previousLocationWasRunning;
+  const wasRunning = keepRunning
+    ? previousLocationWasRunning
+    : await quitInstalled() || previousLocationWasRunning;
 
   await rm(OLD, { recursive: true, force: true });
 
@@ -175,7 +181,11 @@ await main(async () => {
     await rename(APP, OLD);
 
   await rename(STAGING, APP);
-  await rm(OLD, { recursive: true, force: true });
+
+  // A Grazer left running keeps loading its resources from the old bundle
+  // until it quits; the next install removes it.
+  if (!keepRunning)
+    await rm(OLD, { recursive: true, force: true });
 
   await writeCommandLauncher(COMMAND_LAUNCHER, APP);
 

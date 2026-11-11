@@ -26,6 +26,7 @@ struct HistoryStore
 {
     explicit HistoryStore(const emberstore::Database& db);
 
+    // Loopback pages (localhost, 127.0.0.1) are not recorded.
     void recordVisit(const std::string& url,
                      const std::string& title,
                      std::int64_t atMs);

@@ -1,4 +1,5 @@
 add_executable(GrazerTests
+        DownloadTests.cpp
         ErrorPageTests.cpp
         FuzzyMatchTests.cpp
         HistoryTests.cpp

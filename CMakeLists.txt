@@ -51,6 +51,7 @@ lockstep_add_package(
 # without the app shell. Types.h (the palette wire types) is shared with the
 # app / codegen, hence Source on the include path.
 add_library(GrazerBrowser STATIC
+        Lib/Browser/Download.cpp
         Lib/Browser/ErrorPage.cpp
         Lib/Browser/History.cpp
         Lib/Browser/Mru.cpp

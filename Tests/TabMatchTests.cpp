@@ -52,3 +52,18 @@ auto tMovedOn = test("TabMatch/a tab that navigated elsewhere isn't found") = []
 
     check(findOpenTab(tabs, "https://github.com/jamierpond") == -1);
 };
+
+auto tClosingReturnsToMostRecentTab =
+    test("TabMatch/closing returns to the most recently active tab") = []
+{
+    check(findMostRecentlyActivatedTab({3, 7, 5}, 0) == 1);
+    check(findMostRecentlyActivatedTab({9, 0, 2}, 2) == 0);
+};
+
+auto tNeverActivatedTabsFallBackToNeighbour =
+    test("TabMatch/with no activation history the neighbour is used") = []
+{
+    check(findMostRecentlyActivatedTab({0, 0, 0}, 1) == 1);
+    check(findMostRecentlyActivatedTab({0, 0}, 5) == 1);
+    check(findMostRecentlyActivatedTab({}, 0) == -1);
+};

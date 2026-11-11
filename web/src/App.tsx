@@ -35,46 +35,27 @@ export default function App() {
         void backend.setQuery({ text });
     };
 
-    const onKeyDown = (e: React.KeyboardEvent) => {
-        const ctrl = e.ctrlKey;
+    const isCaretAtEnd = () =>
+        inputRef.current?.selectionStart === query.length &&
+        inputRef.current?.selectionEnd === query.length;
 
-        if (e.key === 'ArrowDown' || (ctrl && (e.key === 'j' || e.key === 'n'))) {
-            e.preventDefault();
-            void backend.moveSelection({ delta: 1 });
-        } else if (e.key === 'ArrowUp' || (ctrl && (e.key === 'k' || e.key === 'p'))) {
-            e.preventDefault();
-            void backend.moveSelection({ delta: -1 });
-        } else if (ctrl && e.key === 's') {
-            e.preventDefault();
-            const item = results.items[results.selected];
-            if (item && !item.isSearch) void backend.toggleBookmark(item);
-        } else if (ctrl && e.key === 'x') {
-            e.preventDefault();
-            const item = results.items[results.selected];
-            if (item && !item.isSearch) void backend.closeItem(item);
-        } else if (
-            e.key === 'Tab' ||
-            (e.key === 'ArrowRight' &&
-                inputRef.current?.selectionStart === query.length &&
-                inputRef.current?.selectionEnd === query.length)
-        ) {
-            // Take the selected row's URL into the input to keep typing; the
-            // native query follows, so Enter opens what's typed.
-            e.preventDefault();
-            void backend.complete().then(({ text }) => {
-                if (!text) return;
-                setQuery(text);
-                requestAnimationFrame(() =>
-                    inputRef.current?.setSelectionRange(text.length, text.length),
-                );
-            });
-        } else if (e.key === 'Enter') {
-            e.preventDefault();
-            void backend.activate();
-        } else if (e.key === 'Escape') {
-            e.preventDefault();
-            void backend.cancel();
-        }
+    // Take the selected row's URL into the input to keep typing; the
+    // native query follows, so Enter opens what's typed.
+    const completeSelection = () => {
+        void backend.complete().then(({ text }) => {
+            if (!text) return;
+            setQuery(text);
+            requestAnimationFrame(() =>
+                inputRef.current?.setSelectionRange(text.length, text.length),
+            );
+        });
+    };
+
+    const onKeyDown = (e: React.KeyboardEvent) => {
+        const action = findKeyAction(e, isCaretAtEnd);
+        if (!action) return;
+        e.preventDefault();
+        runKeyAction(action, results, completeSelection);
     };
 
     return (
@@ -119,6 +100,123 @@ export default function App() {
     );
 }
 
+type KeyAction =
+    | 'down'
+    | 'up'
+    | 'toggleBookmark'
+    | 'clear'
+    | 'complete'
+    | 'activate'
+    | 'cancel';
+
+const ctrlKeyActions = new Map<string, KeyAction>([
+    ['j', 'down'],
+    ['n', 'down'],
+    ['k', 'up'],
+    ['p', 'up'],
+    ['s', 'toggleBookmark'],
+    ['x', 'clear'],
+]);
+
+const plainKeyActions = new Map<string, KeyAction>([
+    ['ArrowDown', 'down'],
+    ['ArrowUp', 'up'],
+    ['Tab', 'complete'],
+    ['Enter', 'activate'],
+    ['Escape', 'cancel'],
+]);
+
+function findKeyAction(
+    e: React.KeyboardEvent,
+    isCaretAtEnd: () => boolean,
+): KeyAction | undefined {
+    const plain = plainKeyActions.get(e.key);
+    if (plain) return plain;
+    if (e.key === 'ArrowRight' && isCaretAtEnd()) return 'complete';
+    if (e.ctrlKey) return ctrlKeyActions.get(e.key);
+    return undefined;
+}
+
+function runKeyAction(
+    action: KeyAction,
+    results: { items: GoItem[]; selected: number },
+    completeSelection: () => void,
+) {
+    const item = results.items[results.selected];
+    const realItem = item && !item.isSearch ? item : undefined;
+
+    const handlers: Record<KeyAction, () => void> = {
+        down: () => void backend.moveSelection({ delta: 1 }),
+        up: () => void backend.moveSelection({ delta: -1 }),
+        toggleBookmark: () => realItem && void backend.toggleBookmark(realItem),
+        clear: () => realItem && void backend.closeItem(realItem),
+        complete: completeSelection,
+        activate: () => void backend.activate(),
+        cancel: () => void backend.cancel(),
+    };
+
+    handlers[action]();
+}
+
+function SearchRow({
+    item,
+    selected,
+    rowRef,
+}: {
+    item: GoItem;
+    selected: boolean;
+    rowRef?: React.Ref<HTMLLIElement>;
+}) {
+    return (
+        <li
+            ref={rowRef}
+            className={`row search ${selected ? 'selected' : ''}`}
+            onClick={() => void backend.choose(item)}
+        >
+            <span className="magnifier">⌕</span>
+            <span className="text">
+                <span className="title">{item.title}</span>
+            </span>
+        </li>
+    );
+}
+
+function getDotClass(item: GoItem) {
+    if (item.failed) return 'dead';
+    if (item.tabId >= 0) return 'open';
+    return '';
+}
+
+function StarButton({ item }: { item: GoItem }) {
+    return (
+        <button
+            className={`star ${item.bookmarked ? 'active' : ''}`}
+            title={item.bookmarked ? 'Remove from places' : 'Save as place'}
+            onClick={(e) => {
+                e.stopPropagation();
+                void backend.toggleBookmark(item);
+            }}
+        >
+            {item.bookmarked ? '★' : '☆'}
+        </button>
+    );
+}
+
+function CloseButton({ item }: { item: GoItem }) {
+    return (
+        <button
+            className="close"
+            title={item.tabId >= 0 ? 'Close tab (^X)' : 'Clear suggestion (^X)'}
+            onClick={(e) => {
+                e.stopPropagation();
+                void backend.closeItem(item);
+            }}
+        >
+            ✕
+        </button>
+    );
+}
+
 function Row({
     item,
     selected,
@@ -129,18 +227,7 @@ function Row({
     rowRef?: React.Ref<HTMLLIElement>;
 }) {
     if (item.isSearch) {
-        return (
-            <li
-                ref={rowRef}
-                className={`row search ${selected ? 'selected' : ''}`}
-                onClick={() => void backend.choose(item)}
-            >
-                <span className="magnifier">⌕</span>
-                <span className="text">
-                    <span className="title">{item.title}</span>
-                </span>
-            </li>
-        );
+        return <SearchRow item={item} selected={selected} rowRef={rowRef} />;
     }
 
     return (
@@ -149,36 +236,15 @@ function Row({
             className={`row ${selected ? 'selected' : ''} ${item.failed ? 'failed' : ''}`}
             onClick={() => void backend.choose(item)}
         >
-            <span
-                className={`dot ${item.failed ? 'dead' : item.tabId >= 0 ? 'open' : ''}`}
-            />
+            <span className={`dot ${getDotClass(item)}`} />
 
             <span className="text">
                 <span className="title">{item.title || item.url}</span>
                 <span className="url">{item.url}</span>
             </span>
 
-            <button
-                className={`star ${item.bookmarked ? 'active' : ''}`}
-                title={item.bookmarked ? 'Remove from places' : 'Save as place'}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    void backend.toggleBookmark(item);
-                }}
-            >
-                {item.bookmarked ? '★' : '☆'}
-            </button>
-
-            <button
-                className="close"
-                title={item.tabId >= 0 ? 'Close tab (^X)' : 'Clear suggestion (^X)'}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    void backend.closeItem(item);
-                }}
-            >
-                ✕
-            </button>
+            <StarButton item={item} />
+            <CloseButton item={item} />
         </li>
     );
 }

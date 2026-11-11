@@ -1,6 +1,7 @@
 #include "TestSupport.h"
 
 #include <Mru.h>
+#include <Url.h>
 
 #include <NanoTest/NanoTest.h>
 
@@ -40,4 +41,14 @@ auto tPruneKeepsNewest = test("Mru/prune drops the oldest stamps") = []
     check(mru.lastUsed("site-0.com") == 0);
     check(mru.lastUsed("site-" + std::to_string(MruStore::maxEntries + 9) + ".com")
           == (std::int64_t) MruStore::maxEntries + 10);
+};
+
+auto tHomeIsNotStamped = test("Mru/grazer://home is never recorded as a visit") = []
+{
+    auto db = testing::freshDatabase("mru-home");
+    auto mru = MruStore {db};
+
+    mru.touch(normalizeURL(homeURL), 1000);
+
+    check(mru.lastUsed(normalizeURL(homeURL)) == 0);
 };

@@ -2,6 +2,29 @@
 
 namespace grazer
 {
+namespace
+{
+// eacp passes only NSError.localizedDescription; -999 has no localized text,
+// so macOS prints the domain and code.
+constexpr auto cancelledByWebKitFragment = "NSURLErrorDomain error -999.";
+// WebKitErrorDomain 102's localizedDescription (English).
+constexpr auto frameLoadInterruptedFragment = "Frame load interrupted";
+// COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED in eacp's Windows text.
+constexpr auto cancelledByWebView2Fragment = "Navigation failed (status=14)";
+
+bool containsText(const std::string& text, const std::string& fragment)
+{
+    return text.find(fragment) != std::string::npos;
+}
+} // namespace
+
+bool isCancelledNavigation(const std::string& error)
+{
+    return containsText(error, cancelledByWebKitFragment)
+           || containsText(error, frameLoadInterruptedFragment)
+           || containsText(error, cancelledByWebView2Fragment);
+}
+
 std::string htmlEscape(const std::string& text)
 {
     auto escaped = std::string {};

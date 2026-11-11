@@ -73,6 +73,7 @@ struct Tab
 
     bool failed = false;
     bool hasFinishedFirstLoad = false;
+    std::int64_t lastActivatedSequence = 0;
 };
 
 struct BrowserWindow;
@@ -270,7 +271,9 @@ struct BrowserView final : View
         auto& tab = tabs.createNew(nextTabId++, getWebViewOptions());
         tab.view().addUserScript(vimiumScript(sites.excludedKeybindingsJSON()));
         tab.view().addScriptMessageHandler(
-            "grazer", [this](const std::string& command) { handleCommand(command); });
+            "grazer",
+            [this, t = &tab](const std::string& command)
+            { handleCommand(*t, command); });
 
         wireTab(tab);
 
@@ -278,8 +281,34 @@ struct BrowserView final : View
         // lands mid-load (or a load that fails outright) keeps the tab.
         tab.url = url;
         tab.openedUrl = url;
-        tab.view().loadURL(url);
+        loadInto(tab, url);
         return tab;
+    }
+
+    // Home is never handed to the webview (it would refuse the scheme): an
+    // empty page carries the user script, so o / t still open the palette.
+    void loadInto(Tab& tab, const std::string& url)
+    {
+        if (isHomeURL(url))
+        {
+            tab.title = homeTitle;
+            tab.view().loadHTML(homePageHtml);
+        }
+        else
+            tab.view().loadURL(url);
+    }
+
+    // Choosing a place from the palette on a home tab replaces home rather
+    // than leaving it behind.
+    void navigateHomeTabTo(Tab& tab, const std::string& url)
+    {
+        tab.url = url;
+        tab.openedUrl = url;
+        tab.title.clear();
+        tab.hasFinishedFirstLoad = false;
+        updateLoadingBackdrop();
+        tab.view().loadURL(url);
+        syncPalette();
     }
 
     void openTab(const std::string& url)
@@ -305,65 +334,17 @@ struct BrowserView final : View
         auto* t = &tab;
         auto& view = tab.view();
 
-        // The http guard keeps loadHTML navigations (the error page) from
-        // clobbering the tab's real URL or polluting history.
         view.onNavigationStarted = [this, t](const std::string& url)
-        {
-            if (url.starts_with("http"))
-            {
-                if (pageKey(url) != pageKey(t->openedUrl))
-                    t->openedUrl.clear();
-
-                t->url = url;
-                t->failed = false;
-                history.recordVisit(url, "", MruStore::nowMs());
-
-                if (t == activeTab)
-                    mru.touch(normalizeURL(url));
-            }
-
-            syncPalette();
-        };
+        { handleNavigationStarted(*t, url); };
 
         view.onTitleChanged = [this, t](const std::string& title)
-        {
-            t->title = title;
+        { handleTitleChanged(*t, title); };
 
-            // The error page's own title must not rename the history entry
-            // of the URL that failed to load.
-            if (!t->failed)
-                history.updateTitle(t->url, title);
-
-            syncPalette();
-        };
-
-        // The page the navigation landed on: server redirects (a sign-in hop
-        // back to the page, /r to /r/week) never start a navigation of their
-        // own, so without this the tab keeps the URL it was sent to.
         view.onNavigationFinished = [this, t](const std::string& url)
-        {
-            t->hasFinishedFirstLoad = true;
-            updateLoadingBackdrop();
-
-            if (t == activeTab && !paletteOpen)
-                t->view().focusContent();
-
-            updateChromeNav();
-
-            if (url.starts_with("http") && !t->failed && url != t->url)
-            {
-                t->url = url;
-                syncPalette();
-            }
-        };
+        { handleNavigationFinished(*t, url); };
 
         view.onNavigationFailed = [this, t](const std::string& error)
-        {
-            t->failed = true;
-            history.forget(t->url);
-            t->view().loadHTML(errorPageHTML(t->url, error));
-            syncPalette();
-        };
+        { handleNavigationFailed(*t, error); };
 
         view.onNewWindowRequested =
             [this](EA::OwningPointer<WebView> popup, const std::string&)
@@ -372,12 +353,106 @@ struct BrowserView final : View
             return true;
         };
 
+        BrowserEngine::allowPictureInPicture(view);
+        BrowserEngine::saveAttachmentsAsDownloads(view);
+
         BrowserEngine::reportDownloads(
             view,
             [this, t](const std::string& message)
             { showToast(activeTab != nullptr ? *activeTab : *t, message); });
 
         view.onClose = [this, t] { Threads::callAsync([this, t] { closeTab(t); }); };
+    }
+
+    // The http guard keeps loadHTML navigations (the error page) from
+    // clobbering the tab's real URL or polluting history.
+    void handleNavigationStarted(Tab& tab, const std::string& url)
+    {
+        if (url.starts_with("http"))
+            recordPageVisit(tab, url);
+
+        syncPalette();
+    }
+
+    void handleTitleChanged(Tab& tab, const std::string& title)
+    {
+        if (isHomeURL(tab.url))
+            return;
+
+        tab.title = title;
+
+        // The error page's own title must not rename the history entry
+        // of the URL that failed to load.
+        if (!tab.failed)
+            history.updateTitle(tab.url, title);
+
+        syncPalette();
+    }
+
+    // The page the navigation landed on: server redirects (a sign-in hop
+    // back to the page, /r to /r/week) never start a navigation of their
+    // own, so without this the tab keeps the URL it was sent to.
+    void handleNavigationFinished(Tab& tab, const std::string& url)
+    {
+        tab.hasFinishedFirstLoad = true;
+        updateLoadingBackdrop();
+
+        if (&tab == activeTab && !paletteOpen)
+            tab.view().focusContent();
+
+        updateChromeNav();
+
+        if (isRealPageMove(tab, url))
+        {
+            tab.url = url;
+            syncPalette();
+        }
+    }
+
+    void handleNavigationFailed(Tab& tab, const std::string& error)
+    {
+        if (isCancelledNavigation(error))
+            return;
+
+        tab.failed = true;
+        history.forget(tab.url);
+        tab.view().loadHTML(errorPageHTML(tab.url, error));
+        syncPalette();
+    }
+
+    // An http(s) URL other than the tab's own, on a tab that hasn't failed.
+    static bool isRealPageMove(const Tab& tab, const std::string& url)
+    {
+        if (!url.starts_with("http") || tab.failed)
+            return false;
+
+        return url != tab.url;
+    }
+
+    void recordPageVisit(Tab& tab, const std::string& url)
+    {
+        if (pageKey(url) != pageKey(tab.openedUrl))
+            tab.openedUrl.clear();
+
+        tab.url = url;
+        tab.failed = false;
+        history.recordVisit(url, "", MruStore::nowMs());
+
+        if (&tab == activeTab)
+            mru.touch(normalizeURL(url));
+    }
+
+    // Same-document navigations (pushState, #fragment) fire no navigation
+    // event, so the webview's own URL is the truth. Returns whether it moved.
+    bool refreshTabURLFromWebView(Tab& tab)
+    {
+        auto webViewURL = tab.view().getURL();
+
+        if (!isRealPageMove(tab, webViewURL))
+            return false;
+
+        recordPageVisit(tab, webViewURL);
+        return true;
     }
 
     void switchTo(Tab& tab)
@@ -389,6 +464,7 @@ struct BrowserView final : View
             activeTab->view().removeFromParent();
 
         activeTab = &tab;
+        tab.lastActivatedSequence = ++activationSequence;
         content.addSubview(tab.view());
         tab.view().setBounds(content.getLocalBounds());
         updateLoadingBackdrop();
@@ -397,16 +473,21 @@ struct BrowserView final : View
             tab.view().focusContent();
 
         saveSession();
+        browser.scheduleRudderPush();
     }
 
-    // A fresh tab's webview paints flat grey until its first page finishes.
+    // A fresh tab's webview paints flat grey until its first page finishes;
+    // a home tab shows the backdrop for as long as it stays home.
     void updateLoadingBackdrop()
     {
-        if (activeTab != nullptr && !activeTab->hasFinishedFirstLoad)
+        if (activeTab != nullptr
+            && (isHomeURL(activeTab->url) || !activeTab->hasFinishedFirstLoad))
             loadingBackdrop.showOver(content);
         else
             loadingBackdrop.hide();
     }
+
+    void closeActiveTab() { closeTab(activeTab); }
 
     void closeTab(Tab* tab)
     {
@@ -434,8 +515,9 @@ struct BrowserView final : View
             return;
         }
 
+        // Back to the tab the user came from, like Safari/Chrome, not whichever sits next to it.
         if (wasActive)
-            switchTo(*tabs[std::min(index, tabs.size() - 1)]);
+            switchTo(*tabs[findMostRecentlyActivatedTab(getActivationStamps(), index)]);
 
         syncPalette();
     }
@@ -459,6 +541,16 @@ struct BrowserView final : View
             history.forget(item.url);
 
         syncPalette();
+    }
+
+    std::vector<std::int64_t> getActivationStamps() const
+    {
+        auto stamps = std::vector<std::int64_t> {};
+
+        for (auto& tab: tabs)
+            stamps.push_back(tab->lastActivatedSequence);
+
+        return stamps;
     }
 
     void closeTabById(std::int64_t id)
@@ -494,6 +586,9 @@ struct BrowserView final : View
     {
         if (paletteOpen)
             return;
+
+        if (activeTab != nullptr)
+            refreshTabURLFromWebView(*activeTab);
 
         paletteOpen = true;
         originTab = activeTab;
@@ -624,6 +719,9 @@ struct BrowserView final : View
             if (auto* tab = findTab(item.tabId))
                 switchTo(*tab);
         }
+        else if (activeTab != nullptr && isHomeURL(activeTab->url)
+                 && !isHomeURL(item.url))
+            navigateHomeTabTo(*activeTab, item.url);
         else
             openTab(item.url);
 
@@ -644,14 +742,18 @@ struct BrowserView final : View
         syncPalette();
     }
 
-    // Rebuild the merged tabs+places list, re-rank it against the current
-    // query, push the render model, and keep the on-disk session current.
-    // Called on every tab/place mutation so an open palette stays live.
+    // Keep the on-disk session current and, while the palette is open, rebuild
+    // and re-rank its list. Called on every tab/place mutation; showPalette
+    // calls it too, so a closed palette needn't rank anything.
     void syncPalette()
     {
-        rebuildPaletteItems();
-        refilterPalette();
-        publishResults();
+        if (paletteOpen)
+        {
+            rebuildPaletteItems();
+            refilterPalette();
+            publishResults();
+        }
+
         saveSession();
         updateChromeNav();
         browser.scheduleRudderPush();
@@ -690,10 +792,7 @@ struct BrowserView final : View
 
     void refilterPalette()
     {
-        paletteFiltered = rankPalette(
-            paletteAll,
-            paletteQuery.empty() ? std::vector<HistoryEntry> {} : history.all(),
-            paletteQuery);
+        paletteFiltered = rankPalette(paletteAll, history.all(), paletteQuery);
 
         auto last = std::max((int) paletteFiltered.size() - 1, 0);
         paletteSelected = std::clamp(paletteSelected, 0, last);
@@ -710,9 +809,14 @@ struct BrowserView final : View
 
     // --- Page commands ----------------------------------------------------------
 
-    void handleCommand(const std::string& command)
+    void handleCommand(Tab& sender, const std::string& command)
     {
-        if (command == "openPalette")
+        if (command == "locationChanged")
+        {
+            if (refreshTabURLFromWebView(sender))
+                syncPalette();
+        }
+        else if (command == "openPalette")
             showPalette();
         else if (command == "toggleBookmark")
         {
@@ -748,6 +852,9 @@ struct BrowserView final : View
             return;
 
         auto& view = activeTab->view();
+
+        if (isHomeURL(activeTab->url))
+            return;
 
         if (activeTab->failed)
             view.loadURL(activeTab->url);
@@ -813,7 +920,10 @@ struct BrowserView final : View
         return options;
     }
 
-    static constexpr auto homePage = "https://www.wikipedia.org";
+    static constexpr auto homePage = homeURL;
+    static constexpr auto homeTitle = "Home";
+    static constexpr auto homePageHtml =
+        "<!doctype html><title>Home</title><body style=\"background:#000\"></body>";
 
     static constexpr auto chromeBarHeight = 38.f;
 
@@ -869,6 +979,7 @@ struct BrowserView final : View
     LoadingBackdrop loadingBackdrop;
     EA::OwnedVector<Tab> tabs;
     Tab* activeTab = nullptr;
+    std::int64_t activationSequence = 0;
     Tab* originTab = nullptr;
     std::int64_t& nextTabId = browser.nextTabId;
     std::int64_t generation = 0;
@@ -896,7 +1007,10 @@ struct BrowserWindow
         window.events.onActivationChanged = [this](bool isKey)
         {
             if (isKey && !closed)
+            {
                 browser.activeWindow = this;
+                browser.scheduleRudderPush();
+            }
         };
 
         view.restoreSession(state);
@@ -956,6 +1070,7 @@ struct BrowserWindow
 
 void Browser::start()
 {
+    BrowserEngine::supplyWebCryptoMasterKeyFrom(durable.directory().str());
     setupControl();
     setupRudder();
 
@@ -1146,6 +1261,7 @@ void Browser::pushTabsToRudder()
         return;
 
     auto contexts = std::vector<rudder::protocol::Context> {};
+    auto* shownWindow = frontWindow();
 
     for (auto& window: windows)
     {
@@ -1156,6 +1272,8 @@ void Browser::pushTabsToRudder()
             context.title = tab->title.empty() ? tab->url : tab->title;
             context.subtitle = tab->url;
             context.url = tab->url;
+            context.focused =
+                window.get() == shownWindow && tab.get() == window->view.activeTab;
             contexts.push_back(std::move(context));
         }
     }
@@ -1266,6 +1384,27 @@ struct GrazerApp
                      window->view.findInPage(call);
              },
              .newWindow = [this] { browser.openWindow({}); },
+             .openLocation =
+                 [this]
+             {
+                 if (auto* window = browser.frontWindow())
+                     window->view.showPalette();
+             },
+             .savePage =
+                 [this]
+             {
+                 if (auto* window = browser.frontWindow())
+                 {
+                     if (auto* page = window->view.activePage())
+                         BrowserEngine::savePage(*page);
+                 }
+             },
+             .closeTab =
+                 [this]
+             {
+                 if (auto* window = browser.frontWindow())
+                     window->view.closeActiveTab();
+             },
              .activePage = [this]() -> WebView*
              {
                  auto* window = browser.frontWindow();
@@ -1305,6 +1444,8 @@ struct SnapshotApp
 {
     SnapshotApp()
     {
+        BrowserEngine::supplyWebCryptoMasterKeyFrom(
+            emberstore::appDataDirectory("pond", "GrazerSnapshot").str());
         window.setContentView(view);
 
         for (auto& url: snapshotRequest.urls)
@@ -1327,29 +1468,12 @@ struct SnapshotApp
     // fonts and images; with --palette, open it and give it ~1.5 s to draw.
     void tick()
     {
-        if (capturing)
+        if (capturing || isAnyTabLoading())
             return;
 
-        for (auto& tab: view.tabs)
-            if (tab->view().isLoading())
-                return;
-
-        // --js: run once every tab has loaded, then the settle wait starts
-        // over -- e.g. hide a donation banner that isn't Grazer's to show.
         if (!snapshotRequest.script.empty() && !scriptRan)
         {
-            scriptRan = true;
-            settledTicks = 0;
-
-            for (auto& tab: view.tabs)
-                tab->view().evaluateJavaScript(
-                    snapshotRequest.script,
-                    [](const std::string& result, const std::string& error)
-                    {
-                        if (!result.empty() || !error.empty())
-                            std::fprintf(stderr, "grazer: --js: %s%s\n",
-                                         result.c_str(), error.c_str());
-                    });
+            runScriptInEveryTab();
             return;
         }
 
@@ -1363,6 +1487,37 @@ struct SnapshotApp
             return;
         }
 
+        captureSnapshot();
+    }
+
+    bool isAnyTabLoading()
+    {
+        for (auto& tab: view.tabs)
+            if (tab->view().isLoading())
+                return true;
+
+        return false;
+    }
+
+    // --js: run once every tab has loaded, then the settle wait starts
+    // over -- e.g. hide a donation banner that isn't Grazer's to show.
+    void runScriptInEveryTab()
+    {
+        scriptRan = true;
+        settledTicks = 0;
+
+        for (auto& tab: view.tabs)
+            tab->view().evaluateJavaScript(snapshotRequest.script, &printScriptResult);
+    }
+
+    static void printScriptResult(const std::string& result, const std::string& error)
+    {
+        if (!result.empty() || !error.empty())
+            std::fprintf(stderr, "grazer: --js: %s%s\n", result.c_str(), error.c_str());
+    }
+
+    void captureSnapshot()
+    {
         capturing = true;
         view.renderToImageAsync(2.f).then(
             [](Image image)
@@ -1613,44 +1768,39 @@ struct ControlClientApp
     eacp::IPC::RpcClient client {Control::channelName, eacp::Time::MS {4000}};
 };
 
-int main(int argc, char* argv[])
+namespace
+{
+SnapshotRequest parseSnapshotRequest(int argc, char* argv[])
+{
+    auto request = SnapshotRequest {};
+    request.output = argv[2];
+
+    for (int i = 3; i < argc; ++i)
+    {
+        if (std::string {argv[i]} == "--palette")
+            request.palette = true;
+        else if (std::string {argv[i]} == "--js" && i + 1 < argc)
+            request.script = argv[++i];
+        else
+            request.urls.emplace_back(argv[i]);
+    }
+
+    return request;
+}
+
+int runSnapshot(int argc, char* argv[])
+{
+    snapshotMode = true;
+    snapshotRequest = parseSnapshotRequest(argc, argv);
+    return eacp::Apps::run<SnapshotApp>();
+}
+
+// Plain launch, maybe carrying URLs from the OS -- start catching them
+// before the loop runs, whichever instance ends up opening them.
+int runBrowser(int argc, char* argv[])
 {
     using namespace eacp;
 
-    Apps::setCommandLineArgs(argc, argv);
-
-    // Every mode below but a plain launch prints, if only an error.
-    if (argc > 1 && std::string {argv[1]}.starts_with("--"))
-        Console::attachToParent();
-
-    if (argc >= 4 && std::string {argv[1]} == "--snapshot")
-    {
-        snapshotMode = true;
-        snapshotRequest.output = argv[2];
-
-        for (int i = 3; i < argc; ++i)
-        {
-            if (std::string {argv[i]} == "--palette")
-                snapshotRequest.palette = true;
-            else if (std::string {argv[i]} == "--js" && i + 1 < argc)
-                snapshotRequest.script = argv[++i];
-            else
-                snapshotRequest.urls.emplace_back(argv[i]);
-        }
-
-        return Apps::run<SnapshotApp>();
-    }
-
-    // An explicit control flag never launches a window: talk to the running
-    // instance and exit.
-    if (auto request = parseControlRequest({argv, argv + argc}))
-    {
-        pendingRequest = request;
-        return Apps::run<ControlClientApp>();
-    }
-
-    // Plain launch, maybe carrying URLs from the OS -- start catching them
-    // before the loop runs, whichever instance ends up opening them.
     OpenUrls::listen();
 
     // Hold the per-user singleton for the whole process; the
@@ -1667,4 +1817,29 @@ int main(int argc, char* argv[])
     }
 
     return Apps::run<GrazerApp>(argc, argv);
+}
+} // namespace
+
+int main(int argc, char* argv[])
+{
+    using namespace eacp;
+
+    Apps::setCommandLineArgs(argc, argv);
+
+    // Every mode below but a plain launch prints, if only an error.
+    if (argc > 1 && std::string {argv[1]}.starts_with("--"))
+        Console::attachToParent();
+
+    if (argc >= 4 && std::string {argv[1]} == "--snapshot")
+        return runSnapshot(argc, argv);
+
+    // An explicit control flag never launches a window: talk to the running
+    // instance and exit.
+    if (auto request = parseControlRequest({argv, argv + argc}))
+    {
+        pendingRequest = request;
+        return Apps::run<ControlClientApp>();
+    }
+
+    return runBrowser(argc, argv);
 }

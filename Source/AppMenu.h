@@ -23,6 +23,17 @@ struct Actions
     // Ctrl+N there (see PageScript.h).
     std::function<void()> newWindow;
 
+    // File > Open Location... (Cmd+L): the front window's palette. A menu key
+    // equivalent, so it works whatever has focus or the page swallows.
+    std::function<void()> openLocation;
+
+    // File > Save Page (Cmd+S): download the front window's page.
+    std::function<void()> savePage;
+
+    // File > Close Tab (Cmd+W): the front window's active tab. Windows takes
+    // Ctrl+W in the page (see PageScript.h).
+    std::function<void()> closeTab;
+
     // View > Zoom In / Zoom Out / Actual Size zoom this: the front window's
     // page. Not WebView::focused, which can be the chrome bar or palette.
     std::function<eacp::Graphics::WebView*()> activePage;

@@ -1,4 +1,5 @@
 #include "Mru.h"
+#include "Url.h"
 
 #include <algorithm>
 #include <chrono>
@@ -15,6 +16,9 @@ MruStore::MruStore(const emberstore::Database& db)
 
 void MruStore::touch(const std::string& normalizedUrl, std::int64_t atMs)
 {
+    if (isHomeURL(normalizedUrl))
+        return;
+
     stamps.doc(normalizedUrl).set({atMs});
 }
 

@@ -2,10 +2,36 @@
 #include "Url.h"
 
 #include <algorithm>
+#include <array>
 #include <utility>
 
 namespace grazer
 {
+namespace
+{
+constexpr std::array loopbackHosts = {"localhost", "127.0.0.1", "[::1]"};
+
+std::string getHost(const std::string& url)
+{
+    auto normalized = normalizeURL(url);
+    auto hostAndPort = normalized.substr(0, normalized.find('/'));
+
+    if (hostAndPort.starts_with("["))
+        return hostAndPort.substr(0, hostAndPort.find(']') + 1);
+
+    return hostAndPort.substr(0, hostAndPort.find(':'));
+}
+
+// Sign-in flows bounce through a local callback server (127.0.0.1:port/callback);
+// those pages are never worth suggesting again.
+bool isLoopbackURL(const std::string& url)
+{
+    auto host = getHost(url);
+    return std::find(loopbackHosts.begin(), loopbackHosts.end(), host)
+           != loopbackHosts.end();
+}
+} // namespace
+
 HistoryStore::HistoryStore(const emberstore::Database& db)
     : entries(db.collection<HistoryEntry>("history"))
 {
@@ -16,6 +42,9 @@ void HistoryStore::recordVisit(const std::string& url,
                                const std::string& title,
                                std::int64_t atMs)
 {
+    if (isLoopbackURL(url))
+        return;
+
     auto ref = entries.doc(normalizeURL(url));
     auto entry = ref.get().value_or(HistoryEntry {});
 

@@ -4,6 +4,12 @@
 
 namespace grazer
 {
+// Grazer's own start page: the backdrop shader, no web page behind it.
+inline constexpr auto homeURL = "grazer://home";
+
+// grazer://home, also typed as grazer:home or with a trailing slash.
+bool isHomeURL(const std::string& url);
+
 // What the omnibox does with typed text: anything URL-shaped loads directly
 // (scheme added if missing), everything else becomes a web search.
 std::string navigationURL(const std::string& text);

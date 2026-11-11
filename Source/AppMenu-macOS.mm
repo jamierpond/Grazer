@@ -21,6 +21,12 @@ void install(Window& window, Actions actions)
     auto fileMenu = Menu {"File"};
     fileMenu.add(MenuItem::withAction(
         "New Window", [actions] { actions.newWindow(); }, commandKey("n")));
+    fileMenu.add(MenuItem::withAction(
+        "Open Location…", [actions] { actions.openLocation(); }, commandKey("l")));
+    fileMenu.add(MenuItem::withAction(
+        "Save Page", [actions] { actions.savePage(); }, commandKey("s")));
+    fileMenu.add(MenuItem::withAction(
+        "Close Tab", [actions] { actions.closeTab(); }, commandKey("w")));
     fileMenu.addSeparator();
     fileMenu.add(MenuItem::withAction("Make Grazer the Default Browser…",
                                       [] { DefaultBrowser::askToBecomeDefaultBrowser(); }));

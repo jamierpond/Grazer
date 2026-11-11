@@ -22,9 +22,9 @@ test:
 run:
     {{msvc}} node scripts/run.mjs
 
-[doc('Build Release (locked deps) + install: ~/.local/libexec/grazer/Grazer.app (+ ~/.local/bin/grazer), or %LOCALAPPDATA%\Programs\Grazer on Windows')]
-install:
-    {{msvc}} node scripts/install.mjs
+[doc('Build Release (locked deps) + install: ~/.local/libexec/grazer/Grazer.app (+ ~/.local/bin/grazer), or %LOCALAPPDATA%\Programs\Grazer on Windows. --keep-running leaves a running Grazer up')]
+install *args:
+    {{msvc}} node scripts/install.mjs {{args}}
 
 [doc('Move branch-pinned deps (eacp@grazer, Rudder@main, ...) to their latest commits in lockstep.lock; builds nothing')]
 update-deps:

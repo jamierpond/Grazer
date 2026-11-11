@@ -92,3 +92,17 @@ auto tHistoryPruneKeepsNewest = test("History/prune drops the oldest entries") =
     check(history.entries.size() == HistoryStore::maxEntries);
     check(entryFor(history, "https://site-0.com").visits == 0);
 };
+
+auto tLoopbackPagesAreNotRecorded =
+    test("History/loopback sign-in callbacks are not recorded") = []
+{
+    auto db = testing::freshDatabase("history-loopback");
+    auto history = HistoryStore {db};
+
+    history.recordVisit("http://127.0.0.1:53682/callback?code=abc", "", 1000);
+    history.recordVisit("http://localhost:8080/", "", 1000);
+    history.recordVisit("http://[::1]:3000/auth", "", 1000);
+    history.recordVisit("https://localhost.example.com/", "", 1000);
+
+    check(history.all().size() == 1);
+};

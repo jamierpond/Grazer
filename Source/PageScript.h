@@ -21,14 +21,23 @@ static constexpr auto vimiumScriptSource = R"JS(
     const post = command =>
         window.webkit?.messageHandlers?.grazer?.postMessage(command);
 
-    const step = 60;
+    // pushState, replaceState, fragment jumps and SPA back/forward start no
+    // navigation, so native rereads the webview's URL when one happens.
+    const postLocationChanged = () => post('locationChanged');
+    for (const name of ['pushState', 'replaceState']) {
+        const original = history[name];
+        history[name] = function (...args) {
+            const result = original.apply(this, args);
+            postLocationChanged();
+            return result;
+        };
+    }
+    addEventListener('popstate', postLocationChanged);
+    addEventListener('hashchange', postLocationChanged);
+
     const half = () => window.innerHeight / 2;
 
     const bindings = {
-        'j': () => scrollBy(0, step),
-        'k': () => scrollBy(0, -step),
-        'h': () => scrollBy(-step, 0),
-        'l': () => scrollBy(step, 0),
         'd': () => scrollBy(0, half()),
         'u': () => scrollBy(0, -half()),
         'gg': () => scrollTo(0, 0),
@@ -431,17 +440,102 @@ static constexpr auto vimiumScriptSource = R"JS(
     let pending = '';
     let pendingTimer = 0;
 
+    // Editors inside shadow roots (LinkedIn) leave activeElement on the host.
+    function findDeepestActiveElement() {
+        let el = document.activeElement;
+        while (el && el.shadowRoot && el.shadowRoot.activeElement)
+            el = el.shadowRoot.activeElement;
+        return el;
+    }
+
     function isEditable(el) {
         return el && (el.isContentEditable
-            || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
+            || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)
+            || el.getAttribute?.('role') === 'textbox');
+    }
+
+    // --- Picture in picture (Ctrl+P) ----------------------------------------
+    //
+    // Like Chrome's extension: the largest visible playing video, else the
+    // largest visible one, searched through open shadow roots and
+    // same-origin frames. A video already in picture in picture comes back.
+
+    const pictureInPictureKey = '<C-p>';
+
+    function collectVideos(root, videos) {
+        for (const element of root.querySelectorAll('*')) {
+            if (element.tagName === 'VIDEO')
+                videos.push(element);
+            if (element.shadowRoot)
+                collectVideos(element.shadowRoot, videos);
+            if (element.tagName === 'IFRAME') {
+                try {
+                    if (element.contentDocument)
+                        collectVideos(element.contentDocument, videos);
+                } catch (crossOrigin) {}
+            }
+        }
+        return videos;
+    }
+
+    function isInPictureInPicture(video) {
+        return video.ownerDocument.pictureInPictureElement === video
+            || video.webkitPresentationMode === 'picture-in-picture';
+    }
+
+    function getVisibleArea(video) {
+        const rect = video.getBoundingClientRect();
+        return rect.width * rect.height;
+    }
+
+    function isEligibleForPictureInPicture(video) {
+        return video.readyState >= HTMLMediaElement.HAVE_METADATA
+            && !video.disablePictureInPicture
+            && getVisibleArea(video) > 0;
+    }
+
+    function findPictureInPictureVideo(videos) {
+        const eligible = videos.filter(isEligibleForPictureInPicture);
+        const playing = eligible.filter(video => !video.paused && !video.ended);
+        const candidates = playing.length ? playing : eligible;
+        return candidates.sort((a, b) => getVisibleArea(b) - getVisibleArea(a))[0];
+    }
+
+    function setPictureInPicture(video, isEntering) {
+        const mode = isEntering ? 'picture-in-picture' : 'inline';
+        const fallBackToWebKit = () => video.webkitSetPresentationMode?.(mode);
+
+        if (isEntering && video.requestPictureInPicture)
+            video.requestPictureInPicture().catch(fallBackToWebKit);
+        else if (!isEntering && video.ownerDocument.exitPictureInPicture
+            && video.ownerDocument.pictureInPictureElement === video)
+            video.ownerDocument.exitPictureInPicture().catch(fallBackToWebKit);
+        else
+            fallBackToWebKit();
+    }
+
+    // True when a video was found and toggled, so the page keeps Ctrl+P otherwise.
+    function togglePictureInPicture() {
+        const videos = collectVideos(document, []);
+        const current = videos.find(isInPictureInPicture);
+        if (current) {
+            setPictureInPicture(current, false);
+            return true;
+        }
+        const video = findPictureInPictureVideo(videos);
+        if (!video)
+            return false;
+        setPictureInPicture(video, true);
+        return true;
     }
 
     addEventListener('keydown', event => {
-        if (event.metaKey && !event.ctrlKey && !event.altKey
-            && event.key === 'l') {
+        if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+            && event.key.toLowerCase() === 'p'
+            && allowedHere(pictureInPictureKey)
+            && togglePictureInPicture()) {
             event.preventDefault();
             event.stopImmediatePropagation();
-            post('openPalette');
             return;
         }
 
@@ -453,6 +547,16 @@ static constexpr auto vimiumScriptSource = R"JS(
             event.preventDefault();
             event.stopImmediatePropagation();
             post('newWindow');
+            return;
+        }
+
+        // Ctrl+W: close the tab. macOS takes Cmd+W in the menu bar.
+        if (!navigator.platform.startsWith('Mac') && event.ctrlKey
+            && !event.metaKey && !event.altKey && !event.shiftKey
+            && event.key.toLowerCase() === 'w') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            post('closeTab');
             return;
         }
 
@@ -471,7 +575,7 @@ static constexpr auto vimiumScriptSource = R"JS(
             return;
         }
 
-        if (isEditable(document.activeElement)) {
+        if (isEditable(findDeepestActiveElement())) {
             if (event.key === 'Escape')
                 document.activeElement.blur();
             return;
@@ -509,7 +613,7 @@ static constexpr auto vimiumScriptSource = R"JS(
         }
 
         if (event.metaKey || event.ctrlKey || event.altKey || hintState
-            || isEditable(document.activeElement)
+            || isEditable(findDeepestActiveElement())
             || event.key.length !== 1)
             return;
 

@@ -21,9 +21,9 @@ std::vector<GoItem> mergePaletteItems(std::vector<GoItem> tabs,
                                       const std::vector<Place>& places,
                                       const LastUsedFn& lastUsed);
 
-// The list for the current query. Empty query: `all` unchanged. Otherwise
-// fuzzy-rank `all` plus history rows (skipping URLs already present), keep
-// real hits only, and pin the search row at the bottom so search is always
+// The list for the current query. Empty query: `all`, then the most recently
+// visited history not already listed. Otherwise fuzzy-rank `all` plus history
+// rows (skipping URLs already present), keep the best real hits only, and pin the search row at the bottom so search is always
 // one arrow-down away -- and the default when nothing matches.
 std::vector<GoItem> rankPalette(const std::vector<GoItem>& all,
                                 const std::vector<HistoryEntry>& history,

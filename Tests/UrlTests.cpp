@@ -75,17 +75,29 @@ auto tPageKeyDropsFragment = test("Url/pageKey drops the fragment") = []
 {
     check(pageKey("https://mail.google.com/mail/u/1/#inbox")
           == pageKey("https://mail.google.com/mail/u/1/"));
-    check(pageKey("https://mail.google.com/mail/u/1/#inbox") == "mail.google.com/mail/u/1");
+    check(pageKey("https://mail.google.com/mail/u/1/#inbox")
+          == "mail.google.com/mail/u/1");
 };
 
 auto tPageKeyHostCase = test("Url/pageKey lower-cases the host, not the path") = []
 {
     check(pageKey("https://GitHub.com/jamierpond") == "github.com/jamierpond");
-    check(pageKey("https://github.com/Tamber-Inc") != pageKey("https://github.com/tamber-inc"));
+    check(pageKey("https://github.com/Tamber-Inc")
+          != pageKey("https://github.com/tamber-inc"));
 };
 
 auto tPageKeyKeepsQuery = test("Url/pageKey keeps the query") = []
 {
     check(pageKey("https://www.google.com/search?q=a")
           != pageKey("https://www.google.com/search?q=b"));
+};
+
+auto tHomeResolvesToHomeURL =
+    test("Url/grazer:home and grazer://home both open home") = []
+{
+    check(navigationURL("grazer://home") == homeURL);
+    check(navigationURL("grazer:home") == homeURL);
+    check(navigationURL("grazer://home/") == homeURL);
+    check(isHomeURL(homeURL));
+    check(!isHomeURL("https://grazer.home"));
 };

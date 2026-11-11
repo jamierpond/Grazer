@@ -6,8 +6,16 @@
 
 namespace grazer
 {
+bool isHomeURL(const std::string& url)
+{
+    return url == homeURL || url == "grazer://home/" || url == "grazer:home";
+}
+
 std::string navigationURL(const std::string& text)
 {
+    if (isHomeURL(text))
+        return homeURL;
+
     if (looksLikeURL(text))
         return withScheme(text);
 

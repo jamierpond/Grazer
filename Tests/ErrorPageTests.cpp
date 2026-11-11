@@ -27,3 +27,26 @@ auto tPageEscapesInputs = test("ErrorPage/untrusted inputs are escaped") = []
     check(html.find("<svg>") == std::string::npos);
     check(html.find("<b>") == std::string::npos);
 };
+
+auto tCancelledLoadsAreNotFailures =
+    test("ErrorPage/superseded loads count as cancelled") = []
+{
+    check(isCancelledNavigation(
+        "The operation couldn’t be completed. (NSURLErrorDomain error -999.)"));
+    check(isCancelledNavigation("Frame load interrupted"));
+    check(isCancelledNavigation(
+        "Navigation failed (status=14) for url=https://example.com/"));
+};
+
+auto tRealFailuresAreNotCancelled =
+    test("ErrorPage/real failures are not cancelled") = []
+{
+    check(!isCancelledNavigation(
+        "A server with the specified hostname could not be found."));
+    check(!isCancelledNavigation(
+        "The operation couldn’t be completed. (NSURLErrorDomain error -9990.)"));
+    check(!isCancelledNavigation(
+        "Navigation failed (status=13) for url=https://example.com/"));
+    check(!isCancelledNavigation(
+        "Navigation failed (status=140) for url=https://example.com/"));
+};

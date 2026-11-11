@@ -258,3 +258,95 @@ auto tShortQueryHitsShortTitle =
 
     check(ranked.front().title == "GitHub");
 };
+
+namespace
+{
+std::vector<HistoryEntry> someClaudeHistory(int count)
+{
+    auto history = std::vector<HistoryEntry> {};
+
+    for (auto i = 0; i < count; ++i)
+        history.push_back({"https://claude.ai/chat/" + std::to_string(i),
+                           "Sign in to Claude · Chat " + std::to_string(i),
+                           i,
+                           1});
+
+    return history;
+}
+} // namespace
+
+auto tGmailHistoryHits = test("Palette/gmail finds both Gmail inboxes, the one titled Gmail first") = []
+{
+    auto history = std::vector<HistoryEntry> {
+        {"https://mail.google.com/mail/u/0/#inbox",
+         "Inbox (12) - someone@example.com - Example Mail",
+         100,
+         4},
+        {"https://mail.google.com/mail/u/1/#inbox", "Inbox - Gmail", 90, 2}};
+
+    auto ranked = rankPalette({}, history, "gmail");
+
+    check(ranked.size() == 3);
+    check(ranked.front().url == "https://mail.google.com/mail/u/1/#inbox");
+};
+
+auto tGithubTitleHits =
+    test("Palette/github hits a page titled Sign in to GitHub · GitHub") = []
+{
+    auto history = std::vector<HistoryEntry> {
+        {"https://github.com/login", "Sign in to GitHub · GitHub", 100, 1}};
+
+    auto ranked = rankPalette({}, history, "github");
+
+    check(ranked.size() == 2);
+    check(ranked.front().url == "https://github.com/login");
+};
+
+auto tEmptyQueryShowsRecentHistory =
+    test("Palette/an empty query lists recent history after tabs and places") = []
+{
+    auto history = std::vector<HistoryEntry> {
+        {"https://old.example.com", "Old", 100, 1},
+        {"https://github.com/", "GitHub", 500, 5},
+        {"https://new.example.com", "New", 300, 1}};
+
+    auto all = mergePaletteItems(someTabs(), somePlaces(), lastUsedFrom({}));
+    auto ranked = rankPalette(all, history, "");
+
+    check(ranked.size() == all.size() + 2);
+    check(ranked[all.size()].url == "https://new.example.com");
+    check(ranked[all.size() + 1].url == "https://old.example.com");
+};
+
+auto tEmptyQueryHistoryIsCapped =
+    test("Palette/an empty query lists at most 50 history rows") = []
+{
+    constexpr auto historySize = 200;
+    constexpr auto maxRecentHistoryRows = 50;
+    auto ranked = rankPalette({}, someClaudeHistory(historySize), "");
+
+    check(ranked.size() == maxRecentHistoryRows);
+    check(ranked.front().url == "https://claude.ai/chat/199");
+};
+
+auto tHitsAreCapped = test("Palette/a query lists at most 50 hits plus search") = []
+{
+    constexpr auto historySize = 200;
+    constexpr auto maxHitRowsPlusSearch = 51;
+    auto ranked = rankPalette({}, someClaudeHistory(historySize), "claude");
+
+    check(ranked.size() == maxHitRowsPlusSearch);
+    check(ranked.back().isSearch);
+};
+
+auto tDuplicateHistoryListedOnce =
+    test("Palette/history entries for the same place are listed once") = []
+{
+    auto history = std::vector<HistoryEntry> {
+        {"https://webkit.org/blog", "WebKit Blog", 100, 3},
+        {"https://www.webkit.org/blog/", "WebKit Blog", 90, 1}};
+
+    auto ranked = rankPalette({}, history, "webkit");
+
+    check(ranked.size() == 2);
+};
