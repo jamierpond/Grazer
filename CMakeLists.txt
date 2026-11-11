@@ -25,8 +25,7 @@ lockstep_add_package(
         GITHUB_REPOSITORY eyalamirmusic/eacp
         GIT_TAG grazer
         SYSTEM YES
-        EXCLUDE_FROM_ALL YES
-)
+        EXCLUDE_FROM_ALL YES)
 
 # Local persistence (Firestore-flavoured JSON documents). Must come after
 # eacp -- emberstore fetches its own copy only when no eacp targets exist.
@@ -35,8 +34,7 @@ lockstep_add_package(
         GITHUB_REPOSITORY tamber-inc/emberstore
         GIT_TAG main
         SYSTEM YES
-        EXCLUDE_FROM_ALL YES
-)
+        EXCLUDE_FROM_ALL YES)
 
 list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 
@@ -51,8 +49,7 @@ lockstep_add_package(
         GIT_TAG main
         OPTIONS "RUDDER_CLIENT_ONLY ON"
         SYSTEM YES
-        EXCLUDE_FROM_ALL YES
-)
+        EXCLUDE_FROM_ALL YES)
 
 # Grazer's browser logic (URL/omnibox parsing, places, history, session,
 # palette ranking) lives in a plain static library so it stays unit-testable

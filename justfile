@@ -1,7 +1,5 @@
-# Grazer dev command runner. Every recipe is a thin one-liner delegating to a
-# Node script in scripts/ — the dispatchers (build.mjs, run.mjs) pick the
-# platform variant (scripts/<cmd>-<macos|windows>.mjs) from process.platform,
-# so the same `just` commands work everywhere.
+# Grazer dev commands. Each recipe hands off to scripts/<recipe>.mjs, which
+# picks the macOS or Windows variant (scripts/<recipe>-<macos|windows>.mjs).
 
 set windows-shell := ["cmd.exe", "/c"]
 
@@ -13,21 +11,21 @@ default:
 build:
     node scripts/build.mjs
 
-[doc('Build + launch Grazer')]
-run:
-    node scripts/run.mjs
-
 [doc('Build + run the unit tests in build-test/ (leaves build/ alone)')]
 test:
     node scripts/test.mjs
 
-[doc('Move branch-pinned deps (eacp@grazer, Rudder@main, ...) to their latest commits in lockstep.lock; builds nothing')]
-update-deps:
-    node scripts/update-deps.mjs
+[doc('Build + launch Grazer')]
+run:
+    node scripts/run.mjs
 
 [doc('Build Release (locked deps) + install: ~/.local/libexec/grazer/Grazer.app (+ ~/.local/bin/grazer), or %LOCALAPPDATA%\Programs\Grazer on Windows')]
 install:
     node scripts/install.mjs
+
+[doc('Move branch-pinned deps (eacp@grazer, Rudder@main, ...) to their latest commits in lockstep.lock; builds nothing')]
+update-deps:
+    node scripts/update-deps.mjs
 
 [doc('Delete the build directory')]
 clean:
