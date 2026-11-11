@@ -14,5 +14,5 @@ await main(async () => {
     ]);
 
   await run('cmake', ['--build', TEST_DIR, '--target', 'GrazerTests']);
-  await run(join(TEST_DIR, 'Tests', 'GrazerTests'));
+  await run('ctest', ['--test-dir', TEST_DIR, '--output-on-failure']);
 });
