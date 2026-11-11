@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { dirname, join } from 'node:path';
+import { accessSync, constants, statSync } from 'node:fs';
+import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -23,15 +24,57 @@ export function platformScript(name) {
   return join(ROOT, 'scripts', `${name}-${platform}.mjs`);
 }
 
+const isWindows = process.platform === 'win32';
+
+// The absolute path of `command` on PATH, or null.
+function which(command) {
+  const extensions = isWindows
+    ? (process.env.PATHEXT || '.EXE;.CMD;.BAT').split(';')
+    : [''];
+
+  for (const directory of (process.env.PATH || '').split(delimiter)) {
+    for (const extension of extensions) {
+      const candidate = join(directory, command + extension);
+
+      try {
+        accessSync(candidate, constants.X_OK);
+
+        if (statSync(candidate).isFile())
+          return candidate;
+      } catch {
+        // Not in this directory.
+      }
+    }
+  }
+
+  return null;
+}
+
+// On Windows a .cmd/.bat shim (npm) can't be spawned directly (Node rejects it,
+// CVE-2024-27980), so it runs through cmd.exe as one command string: Node
+// deprecates passing args alongside shell: true (DEP0190). The bare name goes
+// to the shell, which resolves it through PATH itself. Everything else, here
+// and on macOS, is spawned directly with no shell.
+function describeSpawn(command, args) {
+  const resolved = isWindows ? (which(command) ?? command) : command;
+
+  if (!isWindows || !/\.(cmd|bat)$/i.test(resolved))
+    return { target: resolved, args, shell: false };
+
+  const quotedArgs = args.map((arg) => `"${String(arg).replace(/"/g, '\\"')}"`);
+  return { target: [command, ...quotedArgs].join(' '), args: [], shell: true };
+}
+
 // Run a command with inherited stdio. Rejects when it can't start or exits
 // non-zero, unless `allowFail`.
 export function run(command, args = [], { allowFail = false, ...options } = {}) {
   return new Promise((resolve, reject) => {
     const fail = (error) => (allowFail ? resolve() : reject(error));
-    const child = spawn(command, args, {
+    const spawnPlan = describeSpawn(command, args);
+    const child = spawn(spawnPlan.target, spawnPlan.args, {
       cwd: ROOT,
       stdio: 'inherit',
-      shell: process.platform === 'win32',
+      shell: spawnPlan.shell,
       ...options,
     });
     child.on('exit', (code) =>
