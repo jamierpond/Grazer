@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            os: macos-latest
+          - name: Windows x64
+            os: windows-latest
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    env:
+      LOCKSTEP_CACHE: ${{ github.workspace }}/.lockstep-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      # lockstep's cache holds the package sources and the library cache, so a
+      # run with an unchanged lock compiles none of the packages again.
+      - uses: actions/cache@v4
+        with:
+          path: .lockstep-cache
+          key: lockstep-${{ matrix.os }}-${{ hashFiles('lockstep.lock', 'cmake/lockstep.cmake') }}
+
+      - uses: extractions/setup-just@v2
+
+      - name: Install Ninja for the CMake build
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - run: just build
+      - run: just test
