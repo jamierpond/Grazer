@@ -46,6 +46,17 @@ lockstep_add_package(
         OPTIONS "RUDDER_CLIENT_ONLY ON"
         SYSTEM YES)
 
+if (NOT TARGET NanoTest)
+    lockstep_add_package(
+            NAME NanoTest
+            GITHUB_REPOSITORY eyalamirmusic/NanoTest
+            GIT_TAG main
+            SYSTEM YES)
+endif ()
+
+# Set after the packages, so only this project's own targets build with -Werror.
+set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
+
 # Grazer's browser logic (URL/omnibox parsing, places, history, session,
 # palette ranking) lives in a plain static library so it stays unit-testable
 # without the app shell. Types.h (the palette wire types) is shared with the
@@ -121,14 +132,6 @@ include(cmake/GrazerPasskeys.cmake)
 grazer_enable_passkeys(Grazer audio.pond.grazer)
 
 target_link_libraries(Grazer PRIVATE RudderClient)
-
-if (NOT TARGET NanoTest)
-    lockstep_add_package(
-            NAME NanoTest
-            GITHUB_REPOSITORY eyalamirmusic/NanoTest
-            GIT_TAG main
-            SYSTEM YES)
-endif ()
 
 if (PROJECT_IS_TOP_LEVEL)
     enable_testing()

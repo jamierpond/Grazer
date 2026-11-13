@@ -30,7 +30,7 @@ NSString* getUrlToOpenForFile(NSURL* fileUrl)
     if ([fileUrl.pathExtension isEqualToString:webLocationExtension])
     {
         auto* webLocation = [NSDictionary dictionaryWithContentsOfURL:fileUrl];
-        auto* linkedUrl = webLocation[webLocationUrlKey];
+        id linkedUrl = webLocation[webLocationUrlKey];
 
         if ([linkedUrl isKindOfClass:[NSString class]])
             return linkedUrl;
