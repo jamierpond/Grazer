@@ -499,11 +499,11 @@ LoadingBackdrop::LoadingBackdrop()
     setVisible(false);
 }
 
-void LoadingBackdrop::showOver(Graphics::View& parent)
+void LoadingBackdrop::showOver(Graphics::View& viewToCover)
 {
     removeFromParent();
-    parent.addSubview(*this);
-    setBounds(parent.getLocalBounds());
+    viewToCover.addSubview(*this);
+    setBounds(viewToCover.getLocalBounds());
     isFluidResetPending = true;
     hasPreviousCursorCells = false;
     setVisible(true);

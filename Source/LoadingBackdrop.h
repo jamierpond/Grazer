@@ -153,7 +153,7 @@ struct LoadingBackdrop final : eacp::GPU::GPUView
 {
     LoadingBackdrop();
 
-    void showOver(eacp::Graphics::View& parent);
+    void showOver(eacp::Graphics::View& viewToCover);
     void hide();
 
     void update(eacp::Threads::FrameTime frameTime) override;
