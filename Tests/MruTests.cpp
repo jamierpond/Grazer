@@ -68,3 +68,21 @@ auto tUsageAddsUp = test("Mru/each use adds one, decayed by age") = []
     check(mru.usage("example.com", firstUseMs + frecencysearch::usageHalfLifeMs) == 1.0);
     check(mru.usage("other.com", firstUseMs) == 0.0);
 };
+
+auto tListUsageMatchesUsage = test("Mru/listUsage gives each URL's usage in one pass") = []
+{
+    auto db = testing::freshDatabase("mru-list-usage");
+    auto mru = MruStore {db};
+    constexpr auto touchedAtMs = std::int64_t {1000};
+    constexpr auto readAtMs = std::int64_t {5000};
+
+    mru.touch("github.com", touchedAtMs);
+    mru.touch("linear.app", touchedAtMs);
+    mru.touch("linear.app", touchedAtMs);
+
+    auto usages = mru.listUsage(readAtMs);
+
+    check(usages.size() == 2);
+    check(usages["github.com"] == mru.usage("github.com", readAtMs));
+    check(usages["linear.app"] == mru.usage("linear.app", readAtMs));
+};

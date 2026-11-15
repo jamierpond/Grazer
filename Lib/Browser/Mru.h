@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 
 namespace grazer
 {
@@ -32,6 +33,10 @@ struct MruStore
 
     // The URL's uses decayed to `atMs`; 0 for one never used.
     double usage(const std::string& normalizedUrl, std::int64_t atMs = nowMs());
+
+    // Every used URL's usage decayed to `atMs`, read in one pass: each
+    // usage() call checks the store's file on disk, too slow once per palette row.
+    std::unordered_map<std::string, double> listUsage(std::int64_t atMs = nowMs());
 
     // Drops the oldest stamps once the collection outgrows maxEntries.
     void prune();

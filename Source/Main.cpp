@@ -1015,10 +1015,14 @@ struct BrowserView final : View
     // Keeps the highlight on its row index, or none if there was none.
     void refilterPalette()
     {
-        paletteFiltered = rankPalette(
-            paletteAll,
-            history.all(),
-            {paletteQuery, paletteMode, [this](const std::string& url) { return mru.usage(url); }});
+        auto usages = mru.listUsage();
+        auto lookUpUsage = [&usages](const std::string& url)
+        {
+            auto found = usages.find(url);
+            return found != usages.end() ? found->second : 0.0;
+        };
+
+        paletteFiltered = rankPalette(paletteAll, history.all(), {paletteQuery, paletteMode, lookUpUsage});
 
         paletteSelected = keepSelectionInRange(paletteSelected, paletteFiltered.size());
     }

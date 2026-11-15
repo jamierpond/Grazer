@@ -32,6 +32,19 @@ double MruStore::usage(const std::string& normalizedUrl, std::int64_t atMs)
     return 0;
 }
 
+std::unordered_map<std::string, double> MruStore::listUsage(std::int64_t atMs)
+{
+    auto usages = std::unordered_map<std::string, double> {};
+    auto ids = stamps.ids();
+    auto values = stamps.values();
+
+    for (auto index = std::size_t {0}; index < ids.size(); ++index)
+        usages[ids[index]] =
+            frecencysearch::calculateDecayedUsage(values[index].usage, values[index].at, atMs);
+
+    return usages;
+}
+
 std::int64_t MruStore::lastUsed(const std::string& normalizedUrl)
 {
     if (auto stamp = stamps.get(normalizedUrl))
