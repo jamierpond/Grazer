@@ -489,6 +489,18 @@ struct BrowserView final : View
 
     void closeActiveTab() { closeTab(activeTab); }
 
+    void closeAllTabsExceptHome()
+    {
+        auto pagesToClose = std::vector<Tab*> {};
+
+        for (auto& tab: tabs)
+            if (!isHomeURL(tab->url))
+                pagesToClose.push_back(tab.get());
+
+        for (auto* tab: pagesToClose)
+            closeTab(tab);
+    }
+
     void closeTab(Tab* tab)
     {
         auto index = tabs.getIndexOfItem(tab);
@@ -1404,6 +1416,12 @@ struct GrazerApp
              {
                  if (auto* window = browser.frontWindow())
                      window->view.closeActiveTab();
+             },
+             .closeAllTabs =
+                 [this]
+             {
+                 if (auto* window = browser.frontWindow())
+                     window->view.closeAllTabsExceptHome();
              },
              .activePage = [this]() -> WebView*
              {

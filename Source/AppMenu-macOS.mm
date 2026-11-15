@@ -27,6 +27,8 @@ void install(Window& window, Actions actions)
         "Save Page", [actions] { actions.savePage(); }, commandKey("s")));
     fileMenu.add(MenuItem::withAction(
         "Close Tab", [actions] { actions.closeTab(); }, commandKey("w")));
+    fileMenu.add(MenuItem::withAction("Close All Tabs",
+                                      [actions] { actions.closeAllTabs(); }));
     fileMenu.addSeparator();
     fileMenu.add(MenuItem::withAction("Make Grazer the Default Browser…",
                                       [] { DefaultBrowser::askToBecomeDefaultBrowser(); }));

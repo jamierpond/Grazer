@@ -34,6 +34,10 @@ struct Actions
     // Ctrl+W in the page (see PageScript.h).
     std::function<void()> closeTab;
 
+    // File > Close All Tabs (no shortcut): every tab in the front window
+    // except Home ones.
+    std::function<void()> closeAllTabs;
+
     // View > Zoom In / Zoom Out / Actual Size zoom this: the front window's
     // page. Not WebView::focused, which can be the chrome bar or palette.
     std::function<eacp::Graphics::WebView*()> activePage;
