@@ -30,6 +30,7 @@
 #include <eacp/WebView/WebView/JsStringLiteral.h>
 #include <emberstore/AppDatabase.h>
 
+#include <PondApp/SingleInstance.h>
 #include <RudderClient.h>
 #include <SessionLog/EventLine.h>
 #include <SessionLog/SessionLog.h>
@@ -1947,7 +1948,8 @@ std::optional<ControlRequest> parseControlRequest(const std::vector<std::string>
 // on the existing browser without launching a second one. Missing instance:
 // the dial never lands, onDisconnected reports "not running" and exits 1 (a
 // duplicate-launch reactivate exits 0 silently -- a plain launch shouldn't
-// error just because the peer raced away).
+// error just because the peer raced away). A duplicate launch the running
+// Grazer answered exits pondapp::exitCodeAnotherInstanceIsRunning.
 struct ControlClientApp
 {
     ControlClientApp()
@@ -2015,8 +2017,10 @@ struct ControlClientApp
                 }
 
                 client.call<Control::Ack>("reactivate")
-                    .then([this](Control::Ack) { finish(0); },
-                          [this](const std::string&) { finish(0); });
+                    .then([this](Control::Ack)
+                          { finish(pondapp::exitCodeAnotherInstanceIsRunning); },
+                          [this](const std::string&)
+                          { finish(pondapp::exitCodeAnotherInstanceIsRunning); });
                 break;
         }
     }
@@ -2037,7 +2041,7 @@ struct ControlClientApp
     void answered()
     {
         if (--unanswered == 0)
-            finish(0);
+            finish(pondapp::exitCodeAnotherInstanceIsRunning);
     }
 
     // id, active marker, title, url -- tab-separated so `cut -f1` yields the id

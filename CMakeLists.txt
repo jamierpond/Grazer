@@ -141,7 +141,7 @@ endif ()
 include(cmake/GrazerPasskeys.cmake)
 grazer_enable_passkeys(Grazer audio.pond.grazer)
 
-target_link_libraries(Grazer PRIVATE RudderClient)
+target_link_libraries(Grazer PRIVATE PondApp RudderClient)
 
 if (PROJECT_IS_TOP_LEVEL)
     enable_testing()
