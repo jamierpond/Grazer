@@ -11,7 +11,8 @@
 
 namespace grazer
 {
-using LastUsedFn = std::function<std::int64_t(const std::string& normalizedUrl)>;
+// How much a page has been used lately (MruStore::usage), by normalized URL.
+using UsageFn = std::function<double(const std::string& normalizedUrl)>;
 
 // ⌘L / o opens the palette to go somewhere from the current tab; ⌘T / t opens
 // it to make a new tab. Rows that aren't open tabs open accordingly.
@@ -33,20 +34,27 @@ struct PaletteTab
 };
 
 // The palette's rows before any typing: open tabs by last viewed, then starred
-// places that aren't open (most recently used first), then the current tab.
+// places that aren't open (most used lately first), then the current tab.
 // An open starred place is one row, the tab, marked bookmarked.
 std::vector<GoItem> listPaletteRows(const std::vector<PaletteTab>& tabs,
                                     const std::vector<Place>& places,
-                                    const LastUsedFn& placeLastUsed);
+                                    const UsageFn& usage);
 
-// The rows for `query`. Empty: `rows` unchanged, no history. Otherwise row 0 is
+// What the user typed, with how rows will open and how much each page is used.
+struct PaletteSearch
+{
+    std::string query;
+    PaletteMode mode = PaletteMode::goFromHere;
+    UsageFn usage;
+};
+
+// The rows for `search.query`. Empty: `rows` unchanged, no history. Otherwise row 0 is
 // the best action: for URL-like text the exact tab/place/history match, else
-// "Open <url>"; for words a strong fuzzy hit with "Search Google for …" second,
-// else search first. Failed pages sink to the end, the current tab after them.
+// "Open <url>"; for words a strong hit with "Search Google for …" second, else
+// search first. Hits are found and ordered by Rudder's FrecencySearch. Failed pages sink to the end, the current tab after them.
 std::vector<GoItem> rankPalette(const std::vector<GoItem>& rows,
                                 const std::vector<HistoryEntry>& history,
-                                const std::string& query,
-                                PaletteMode mode);
+                                const PaletteSearch& search);
 
 // The row highlighted for Enter: 0, or -1 when there are no rows or the only
 // row is the current tab.

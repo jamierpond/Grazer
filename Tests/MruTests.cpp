@@ -3,6 +3,8 @@
 #include <Mru.h>
 #include <Url.h>
 
+#include <FrecencySearch/LearnedPicks.h>
+
 #include <NanoTest/NanoTest.h>
 
 using namespace nano;
@@ -51,4 +53,18 @@ auto tHomeIsNotStamped = test("Mru/grazer://home is never recorded as a visit") 
     mru.touch(normalizeURL(homeURL), 1000);
 
     check(mru.lastUsed(normalizeURL(homeURL)) == 0);
+};
+
+auto tUsageAddsUp = test("Mru/each use adds one, decayed by age") = []
+{
+    auto db = testing::freshDatabase("mru-usage");
+    auto mru = MruStore {db};
+    constexpr auto firstUseMs = std::int64_t {1000};
+
+    mru.touch("example.com", firstUseMs);
+    mru.touch("example.com", firstUseMs);
+
+    check(mru.usage("example.com", firstUseMs) == 2.0);
+    check(mru.usage("example.com", firstUseMs + frecencysearch::usageHalfLifeMs) == 1.0);
+    check(mru.usage("other.com", firstUseMs) == 0.0);
 };

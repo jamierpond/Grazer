@@ -959,13 +959,16 @@ struct BrowserView final : View
         paletteAll = listPaletteRows(listPaletteTabs(),
                                      places.all(),
                                      [this](const std::string& url)
-                                     { return mru.lastUsed(url); });
+                                     { return mru.usage(url); });
     }
 
     // Keeps the highlight on its row index, or none if there was none.
     void refilterPalette()
     {
-        paletteFiltered = rankPalette(paletteAll, history.all(), paletteQuery, paletteMode);
+        paletteFiltered = rankPalette(
+            paletteAll,
+            history.all(),
+            {paletteQuery, paletteMode, [this](const std::string& url) { return mru.usage(url); }});
 
         paletteSelected = keepSelectionInRange(paletteSelected, paletteFiltered.size());
     }

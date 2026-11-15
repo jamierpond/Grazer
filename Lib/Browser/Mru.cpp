@@ -1,6 +1,8 @@
 #include "Mru.h"
 #include "Url.h"
 
+#include <FrecencySearch/LearnedPicks.h>
+
 #include <algorithm>
 #include <chrono>
 #include <utility>
@@ -19,7 +21,15 @@ void MruStore::touch(const std::string& normalizedUrl, std::int64_t atMs)
     if (isHomeURL(normalizedUrl))
         return;
 
-    stamps.doc(normalizedUrl).set({atMs});
+    stamps.doc(normalizedUrl).set({atMs, usage(normalizedUrl, atMs) + 1});
+}
+
+double MruStore::usage(const std::string& normalizedUrl, std::int64_t atMs)
+{
+    if (auto stamp = stamps.get(normalizedUrl))
+        return frecencysearch::calculateDecayedUsage(stamp->usage, stamp->at, atMs);
+
+    return 0;
 }
 
 std::int64_t MruStore::lastUsed(const std::string& normalizedUrl)

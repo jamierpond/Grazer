@@ -1,8 +1,11 @@
 #include "Palette.h"
-#include "FuzzyMatch.h"
 #include "Url.h"
 
+#include <FrecencySearch/MatchLevel.h>
+#include <FrecencySearch/RowOrder.h>
+
 #include <algorithm>
+#include <optional>
 #include <unordered_set>
 #include <utility>
 
@@ -10,26 +13,19 @@ namespace grazer
 {
 namespace
 {
-// A hit needs about half the per-letter score of a consecutive run: letters
-// scattered through a long URL still score above 0 off '/', '.', '&' boundaries.
-constexpr auto hitScorePerLetter = 4;
+using frecencysearch::MatchLevel;
 
-// A hit this good (most letters in consecutive runs) beats searching for the text.
-constexpr auto strongHitScorePerLetter = 6;
+// A match this good (the title, or a word of it, starts with the text) beats
+// searching for the text.
+constexpr auto worstStrongMatchLevel = MatchLevel::nameWordStartsWithQuery;
 
 constexpr std::size_t maxHitRows = 50;
 
 struct ScoredRow
 {
-    int score = 0;
+    frecencysearch::RowRankingFacts facts;
     GoItem row;
 };
-
-int letterCount(const std::string& query)
-{
-    return (int) std::count_if(
-        query.begin(), query.end(), [](char character) { return character != ' '; });
-}
 
 std::unordered_set<std::string> collectPageKeys(const std::vector<GoItem>& rows)
 {
@@ -108,7 +104,7 @@ std::vector<PaletteTab> sortTabsByLastViewed(std::vector<PaletteTab> tabs)
 
 std::vector<GoItem> listPlacesNotOpen(const std::vector<Place>& places,
                                       const std::unordered_set<std::string>& openPages,
-                                      const LastUsedFn& placeLastUsed)
+                                      const UsageFn& usage)
 {
     auto rows = std::vector<GoItem> {};
     auto listedPages = openPages;
@@ -120,8 +116,7 @@ std::vector<GoItem> listPlacesNotOpen(const std::vector<Place>& places,
     std::stable_sort(rows.begin(),
                      rows.end(),
                      [&](const GoItem& a, const GoItem& b) {
-                         return placeLastUsed(normalizeURL(a.url))
-                                > placeLastUsed(normalizeURL(b.url));
+                         return usage(normalizeURL(a.url)) > usage(normalizeURL(b.url));
                      });
     return rows;
 }
@@ -139,28 +134,54 @@ std::vector<GoItem> appendHistoryRows(std::vector<GoItem> rows,
     return rows;
 }
 
-std::vector<ScoredRow> scoreHits(const std::vector<GoItem>& candidates,
-                                 const std::string& query)
+frecencysearch::SearchableTexts getSearchableTexts(const GoItem& row)
 {
-    auto scored = std::vector<ScoredRow> {};
-    auto minimumHitScore = hitScorePerLetter * letterCount(query);
+    return {{row.title}, {frecencysearch::removeUrlScheme(row.url)}};
+}
+
+// Text typed as this row's exact URL finds it best of all.
+std::optional<MatchLevel> findRowMatchLevel(const std::string& query,
+                                            const std::string& normalisedQuery,
+                                            const GoItem& row)
+{
+    if (normalizeURL(row.url) == normalizeURL(query))
+        return MatchLevel::nameStartsWithQuery;
+
+    return frecencysearch::findMatchLevel(normalisedQuery, getSearchableTexts(row));
+}
+
+// Rows the text finds, in FrecencySearch order: match level, then usage, open
+// tabs before the rest.
+std::vector<ScoredRow> findHits(const std::vector<GoItem>& candidates,
+                                const std::string& query,
+                                const UsageFn& usage)
+{
+    auto normalisedQuery = frecencysearch::normaliseQuery(query);
+    auto hits = std::vector<ScoredRow> {};
 
     for (auto& row: candidates)
     {
-        auto score = fuzzyScore(query, row.title + " " + row.url);
+        auto level = findRowMatchLevel(query, normalisedQuery, row);
 
-        if (score && *score >= minimumHitScore)
-            scored.push_back({*score, row});
+        if (!level)
+            continue;
+
+        auto facts = frecencysearch::RowRankingFacts {};
+        facts.level = *level;
+        facts.usage = usage(normalizeURL(row.url));
+        facts.isOpen = row.kind == GoKind::tab;
+        hits.push_back({facts, row});
     }
 
-    std::stable_sort(scored.begin(),
-                     scored.end(),
-                     [](const ScoredRow& a, const ScoredRow& b) { return a.score > b.score; });
+    std::stable_sort(hits.begin(),
+                     hits.end(),
+                     [](const ScoredRow& a, const ScoredRow& b)
+                     { return frecencysearch::shouldRankBefore(a.facts, b.facts); });
 
-    if (scored.size() > maxHitRows)
-        scored.resize(maxHitRows);
+    if (hits.size() > maxHitRows)
+        hits.resize(maxHitRows);
 
-    return scored;
+    return hits;
 }
 
 bool isSinkingRow(const GoItem& row)
@@ -218,14 +239,13 @@ std::vector<GoItem> putURLActionFirst(std::vector<GoItem> rows,
 }
 
 // The best hit that isn't failed or the current tab beats searching for the text.
-bool isBestRowAStrongHit(const std::vector<ScoredRow>& hits, const std::string& query)
+bool isBestRowAStrongHit(const std::vector<ScoredRow>& hits)
 {
     auto best = std::find_if(hits.begin(),
                              hits.end(),
                              [](const ScoredRow& hit) { return !isSinkingRow(hit.row); });
 
-    return best != hits.end()
-           && best->score >= strongHitScorePerLetter * letterCount(query);
+    return best != hits.end() && best->facts.level <= worstStrongMatchLevel;
 }
 
 // A history row for this very search would repeat the search row.
@@ -245,7 +265,7 @@ std::vector<GoItem> placeSearchRow(std::vector<GoItem> rows,
                                    const std::vector<ScoredRow>& hits,
                                    const std::string& query)
 {
-    auto searchPosition = isBestRowAStrongHit(hits, query) ? 1 : 0;
+    auto searchPosition = isBestRowAStrongHit(hits) ? 1 : 0;
     rows.insert(rows.begin() + searchPosition, makeSearchRow(query));
     return rows;
 }
@@ -253,7 +273,7 @@ std::vector<GoItem> placeSearchRow(std::vector<GoItem> rows,
 
 std::vector<GoItem> listPaletteRows(const std::vector<PaletteTab>& tabs,
                                     const std::vector<Place>& places,
-                                    const LastUsedFn& placeLastUsed)
+                                    const UsageFn& usage)
 {
     auto starredPages = std::unordered_set<std::string> {};
 
@@ -273,7 +293,7 @@ std::vector<GoItem> listPaletteRows(const std::vector<PaletteTab>& tabs,
     auto openPages = collectPageKeys(rows);
     openPages.merge(collectPageKeys(current));
 
-    for (auto& place: listPlacesNotOpen(places, openPages, placeLastUsed))
+    for (auto& place: listPlacesNotOpen(places, openPages, usage))
         rows.push_back(std::move(place));
 
     rows.insert(rows.end(), current.begin(), current.end());
@@ -282,18 +302,20 @@ std::vector<GoItem> listPaletteRows(const std::vector<PaletteTab>& tabs,
 
 std::vector<GoItem> rankPalette(const std::vector<GoItem>& rows,
                                 const std::vector<HistoryEntry>& history,
-                                const std::string& query,
-                                PaletteMode mode)
+                                const PaletteSearch& search)
 {
+    auto& query = search.query;
+    auto& usage = search.usage;
+
     if (query.empty())
         return rows;
 
     auto candidates = appendHistoryRows(rows, history);
 
     if (looksLikeURL(query))
-        return putURLActionFirst(orderHitsForDisplay(scoreHits(candidates, query)), query, mode);
+        return putURLActionFirst(orderHitsForDisplay(findHits(candidates, query, usage)), query, search.mode);
 
-    auto hits = scoreHits(removePastSearches(std::move(candidates), query), query);
+    auto hits = findHits(removePastSearches(std::move(candidates), query), query, usage);
     return placeSearchRow(orderHitsForDisplay(hits), hits, query);
 }
 

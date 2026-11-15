@@ -36,30 +36,30 @@ std::vector<Place> somePlaces()
     return {{"GitHub", "https://github.com"}, {"Linear", "https://linear.app"}};
 }
 
-LastUsedFn lastUsedFrom(std::map<std::string, std::int64_t> stamps)
+UsageFn usageFrom(std::map<std::string, double> usage)
 {
-    return [stamps = std::move(stamps)](const std::string& url)
+    return [usage = std::move(usage)](const std::string& url)
     {
-        auto it = stamps.find(url);
-        return it != stamps.end() ? it->second : 0;
+        auto it = usage.find(url);
+        return it != usage.end() ? it->second : 0.0;
     };
 }
 
 std::vector<GoItem> someRows()
 {
-    return listPaletteRows(someTabs(), somePlaces(), lastUsedFrom({}));
+    return listPaletteRows(someTabs(), somePlaces(), usageFrom({}));
 }
 
 std::vector<GoItem> rank(const std::vector<GoItem>& rows,
                          const std::vector<HistoryEntry>& history,
                          const std::string& query)
 {
-    return rankPalette(rows, history, query, goFromHere);
+    return rankPalette(rows, history, {query, goFromHere, usageFrom({})});
 }
 
 GoItem makeTabRow(std::int64_t id, const std::string& title, const std::string& url)
 {
-    return listPaletteRows({makeTab(id, title, url)}, {}, lastUsedFrom({})).front();
+    return listPaletteRows({makeTab(id, title, url)}, {}, usageFrom({})).front();
 }
 } // namespace
 
@@ -88,7 +88,7 @@ auto tTabsByLastViewedThenPlaces =
     test("Palette/no text lists tabs by last viewed, then starred places not open") = []
 {
     auto rows = listPaletteRows(
-        someTabs(), somePlaces(), lastUsedFrom({{"linear.app", 999}}));
+        someTabs(), somePlaces(), usageFrom({{"linear.app", 999}}));
 
     check(rows[0].url == "https://news.ycombinator.com");
     check(rows[1].url == "https://github.com");
@@ -102,7 +102,7 @@ auto tCurrentTabListedLast =
     auto tabs = someTabs();
     tabs[1].isCurrent = true;
 
-    auto rows = listPaletteRows(tabs, somePlaces(), lastUsedFrom({}));
+    auto rows = listPaletteRows(tabs, somePlaces(), usageFrom({}));
 
     check(rows.back().tabId == 1);
     check(rows.back().isCurrent);
@@ -116,7 +116,7 @@ auto tOnlyCurrentTabHasNoSelection =
     auto tab = makeTab(0, "GitHub", "https://github.com");
     tab.isCurrent = true;
 
-    check(findDefaultSelection(listPaletteRows({tab}, {}, lastUsedFrom({}))) == -1);
+    check(findDefaultSelection(listPaletteRows({tab}, {}, usageFrom({}))) == -1);
     check(findDefaultSelection({}) == -1);
 };
 
@@ -125,7 +125,7 @@ auto tCurrentTabNeverFirstWhenTyping =
 {
     auto tabs = someTabs();
     tabs[0].isCurrent = true;
-    auto ranked = rank(listPaletteRows(tabs, {}, lastUsedFrom({})), {}, "github");
+    auto ranked = rank(listPaletteRows(tabs, {}, usageFrom({})), {}, "github");
 
     check(ranked.front().kind == GoKind::search);
     check(ranked.back().isCurrent);
@@ -136,7 +136,7 @@ auto tCurrentURLOpensInThisTab =
 {
     auto tabs = someTabs();
     tabs[0].isCurrent = true;
-    auto ranked = rank(listPaletteRows(tabs, {}, lastUsedFrom({})), {}, "https://github.com");
+    auto ranked = rank(listPaletteRows(tabs, {}, usageFrom({})), {}, "https://github.com");
 
     check(ranked.front().kind == GoKind::typedURL);
     check(ranked.front().title == "Open https://github.com in this tab");
@@ -146,7 +146,7 @@ auto tCurrentURLOpensInThisTab =
 auto tTypedURLTitleFollowsMode =
     test("Palette/new-tab mode titles the typed URL row Open <url>") = []
 {
-    auto ranked = rankPalette({}, {}, "example.com", newTab);
+    auto ranked = rankPalette({}, {}, {"example.com", newTab, usageFrom({})});
 
     check(ranked.front().title == "Open example.com");
 };
@@ -224,7 +224,6 @@ auto tURLQueryWithoutExactMatchOpensTheURL =
 
     check(ranked.front().kind == GoKind::typedURL);
     check(ranked.front().url == "https://google.com");
-    check(ranked.back().url == "https://mail.google.com/");
 };
 
 auto tDeadPagesSinkBelowSearch =
@@ -233,7 +232,7 @@ auto tDeadPagesSinkBelowSearch =
     auto deadTab = makeTab(0, "Can't reach this page", "https://hackernews.com/");
     deadTab.failed = true;
 
-    auto ranked = rank(listPaletteRows({deadTab}, {}, lastUsedFrom({})), {}, "hacker news");
+    auto ranked = rank(listPaletteRows({deadTab}, {}, usageFrom({})), {}, "hackernews");
 
     check(ranked.size() == 2);
     check(ranked.front().kind == GoKind::search);
@@ -386,7 +385,7 @@ std::vector<HistoryEntry> someClaudeHistory(int count)
 }
 } // namespace
 
-auto tGmailHistoryHits = test("Palette/gmail finds both Gmail inboxes, the one titled Gmail first") = []
+auto tGmailHistoryHits = test("Palette/gmail finds the inbox titled Gmail, not one only at mail.google.com") = []
 {
     auto history = std::vector<HistoryEntry> {
         {"https://mail.google.com/mail/u/0/#inbox",
@@ -397,7 +396,7 @@ auto tGmailHistoryHits = test("Palette/gmail finds both Gmail inboxes, the one t
 
     auto ranked = rank({}, history, "gmail");
 
-    check(ranked.size() == 3);
+    check(ranked.size() == 2);
     check(ranked.front().url == "https://mail.google.com/mail/u/1/#inbox");
 };
 
@@ -410,7 +409,7 @@ auto tGithubTitleHits =
     auto ranked = rank({}, history, "github");
 
     check(ranked.size() == 2);
-    check(ranked.front().url == "https://github.com/login");
+    check(ranked[1].url == "https://github.com/login");
 };
 
 auto tEmptyQueryShowsNoHistory =
