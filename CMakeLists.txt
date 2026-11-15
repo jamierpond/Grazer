@@ -59,8 +59,8 @@ set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
 
 # Grazer's browser logic (URL/omnibox parsing, places, history, session,
 # palette ranking) lives in a plain static library so it stays unit-testable
-# without the app shell. Types.h (the palette wire types) is shared with the
-# app / codegen, hence Source on the include path.
+# without the app shell. Types.h (the palette's row model) is shared with the
+# app, hence Source on the include path.
 add_library(GrazerBrowser STATIC
         Lib/Browser/Download.cpp
         Lib/Browser/ErrorPage.cpp
@@ -84,17 +84,18 @@ target_link_libraries(GrazerBrowser PUBLIC emberstore FrecencySearch)
 set(EACP_MACOS_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/macOSBundleInfo.plist.in"
         CACHE INTERNAL "eacp macOS bundle Info.plist template")
 
-eacp_add_webview_app(Grazer
-        SOURCES     Source/Main.cpp Source/LoadingBackdrop.cpp
-        API         Api::GrazerApi
-        API_HEADER  ${CMAKE_CURRENT_SOURCE_DIR}/Source/Types.h
-        WEB_DIR     ${CMAKE_CURRENT_SOURCE_DIR}/web
-        CATEGORY    GrazerGo
-        BUNDLE_ID   audio.pond.grazer
-        BUNDLE_NAME "Grazer"
-        REACT)
+add_executable(Grazer Source/Main.cpp Source/LoadingBackdrop.cpp Source/PaletteView.cpp)
 
-target_link_libraries(Grazer PRIVATE GrazerBrowser eacp-gpu)
+set_target_properties(Grazer PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME "Grazer"
+        MACOSX_BUNDLE_GUI_IDENTIFIER audio.pond.grazer
+        XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER audio.pond.grazer)
+
+eacp_set_gui_subsystem(Grazer)
+set_default_target_setting(Grazer)
+
+target_link_libraries(Grazer PRIVATE GrazerBrowser eacp-webview eacp-network-rpc eacp-ui eacp-gpu)
 
 # The per-platform halves of the app, each beside the shared header it
 # implements: the menu bar (AppMenu), what makes a web view a browser's

@@ -9,6 +9,7 @@
 #include "Mru.h"
 #include "OpenUrls.h"
 #include "PageScript.h"
+#include "PaletteView.h"
 #include "Palette.h"
 #include "Places.h"
 #include "ReloadFromOrigin.h"
@@ -179,31 +180,29 @@ struct BrowserView final : View
     explicit BrowserView(Browser& browserToUse)
         : browser(browserToUse)
     {
-        api.onSetQuery = [this](const std::string& text) { setPaletteQuery(text); };
-        api.onMoveSelection = [this](int delta) { movePaletteSelection(delta); };
-        api.onActivate = [this](bool inNewTab)
+        palette.onSetQuery = [this](const std::string& text) { setPaletteQuery(text); };
+        palette.onMoveSelection = [this](int delta) { movePaletteSelection(delta); };
+        palette.onActivate = [this](bool inNewTab)
         { Threads::callAsync([this, inNewTab] { activatePalette(inNewTab); }); };
-        api.onComplete = [this] { return completePalette(); };
-        api.onChoose = [this](const GoItem& item, bool inNewTab)
+        palette.onComplete = [this] { return completePalette(); };
+        palette.onChoose = [this](const GoItem& item, bool inNewTab)
         {
             auto chosen = item;
             Threads::callAsync([this, chosen, inNewTab] { chooseItem(chosen, inNewTab); });
         };
-        api.onCancel = [this] { Threads::callAsync([this] { cancelPalette(); }); };
-        api.onCloseItem = [this](const GoItem& item)
+        palette.onCancel = [this] { Threads::callAsync([this] { cancelPalette(); }); };
+        palette.onCloseItem = [this](const GoItem& item)
         {
             auto cleared = item;
             Threads::callAsync([this, cleared] { clearItem(cleared); });
         };
-        api.onCloseTabRow = [this](const GoItem& item)
+        palette.onCloseTabRow = [this](const GoItem& item)
         {
             auto row = item;
             Threads::callAsync([this, row] { closeTabRow(row); });
         };
-        api.onToggleBookmark = [this](const GoItem& item)
+        palette.onToggleBookmark = [this](const GoItem& item)
         { toggleBookmark(item.title, item.url); };
-
-        transport.getBridge().use(api);
 
         chromeBar.addScriptMessageHandler(
             "grazerChrome",
@@ -227,7 +226,7 @@ struct BrowserView final : View
     void focusKeys()
     {
         if (paletteOpen)
-            paletteWeb.focusContent();
+            palette.focusQuery();
         else if (activeTab != nullptr)
             activeTab->view().focusContent();
     }
@@ -270,7 +269,7 @@ struct BrowserView final : View
         loadingBackdrop.setBounds(content.getLocalBounds());
 
         if (paletteOpen)
-            paletteWeb.setBounds(getLocalBounds());
+            palette.setBounds(getLocalBounds());
     }
 
     // --- Session ----------------------------------------------------------------
@@ -766,9 +765,9 @@ struct BrowserView final : View
             paletteQuery,
             "\"");
 
-        addSubview(paletteWeb);
-        paletteWeb.setBounds(getLocalBounds());
-        paletteWeb.focusContent();
+        addSubview(palette);
+        palette.setBounds(getLocalBounds());
+        palette.focusQuery();
     }
 
     void hidePalette()
@@ -778,7 +777,7 @@ struct BrowserView final : View
 
         paletteOpen = false;
         originTab = nullptr;
-        paletteWeb.removeFromParent();
+        palette.removeFromParent();
 
         if (activeTab != nullptr)
             activeTab->view().focusContent();
@@ -975,7 +974,7 @@ struct BrowserView final : View
 
     void publishResults()
     {
-        api.results.publish({paletteFiltered, paletteSelected, generation, paletteQuery});
+        palette.setResults({paletteFiltered, paletteSelected, generation, paletteQuery});
     }
 
     // --- Page commands ----------------------------------------------------------
@@ -1080,19 +1079,6 @@ struct BrowserView final : View
         return options;
     }
 
-    static WebView::Options paletteOptions()
-    {
-        auto options = embeddedOptions("GrazerGo");
-        options.transparentBackground = true;
-
-        // The palette serves its UI from an embedded scheme the tabs don't
-        // register. WebView2 refuses a second scheme set in one user-data
-        // folder (ERROR_INVALID_STATE, and the palette never appears), so it
-        // gets a folder of its own. No-op on macOS.
-        options.userDataFolderSuffix = "Palette";
-        return options;
-    }
-
     static constexpr auto homePage = homeURL;
     static constexpr auto homeTitle = "Home";
     static constexpr auto homePageHtml =
@@ -1143,7 +1129,6 @@ struct BrowserView final : View
     std::function<void()> onToggleMaximize = [] {};
 
     Browser& browser;
-    Api::GrazerApi api;
     PlacesStore& places = browser.places;
     SitesStore& sites = browser.sites;
     MruStore& mru = browser.mru;
@@ -1163,8 +1148,7 @@ struct BrowserView final : View
     std::vector<GoItem> paletteAll;
     std::vector<GoItem> paletteFiltered;
     WebView chromeBar {getWebViewOptions()};
-    WebView paletteWeb {paletteOptions()};
-    WebViewBridge transport {paletteWeb};
+    PaletteView palette;
 
     static constexpr auto idleTabCheckInterval = Time::MS {5 * 60 * 1000};
     Threads::Timer idleTabTimer {[this] { closeIdleTabs(); }, idleTabCheckInterval};
@@ -1632,10 +1616,10 @@ struct GrazerApp
 
 // --- Snapshot ------------------------------------------------------------------
 
-// `Grazer --snapshot <out.png> [--palette] [--js <script>] <url>...`: open the URLs as tabs (the
-// last one in front) in a 1400x900 window, wait for every page to load and
-// settle, optionally open the palette over it, and save the window's own
-// rendering -- chrome bar, page and palette web views -- as a PNG. Real Grazer
+// `Grazer --snapshot <out.png> [--palette] [--size <w>x<h>] [--js <script>] <url>...`: open the
+// URLs as tabs (the last one in front) in a window of that size (1400x900 by default),
+// wait for every page to load and settle, optionally open the palette over it,
+// and save the window's own rendering -- chrome bar, page and palette -- as a PNG. Real Grazer
 // pixels for the README on a machine where screencapture has no
 // screen-recording grant. Runs beside the installed browser: no lock, no
 // control server, and a separate profile, so it never touches its tabs.
@@ -1645,6 +1629,8 @@ struct SnapshotRequest
     std::vector<std::string> urls;
     std::string script;
     bool palette = false;
+    int width = 1400;
+    int height = 900;
 };
 
 static SnapshotRequest snapshotRequest;
@@ -1668,8 +1654,8 @@ struct SnapshotApp
         auto options = BrowserWindow::getOptions();
         options.flags = {};
         options.flags.add(WindowFlags::Borderless);
-        options.width = 1400;
-        options.height = 900;
+        options.width = snapshotRequest.width;
+        options.height = snapshotRequest.height;
         options.showInactive = true;
         return options;
     }
@@ -1726,11 +1712,13 @@ struct SnapshotApp
             std::fprintf(stderr, "grazer: --js: %s%s\n", result.c_str(), error.c_str());
     }
 
+    // eacp's window snapshot lays web content over everything else, so the
+    // palette (a GPU view above the tabs on screen) is drawn on afterwards.
     void captureSnapshot()
     {
         capturing = true;
-        view.renderToImageAsync(2.f).then(
-            [](Image image)
+        view.renderToImageAsync(snapshotScale).then(
+            [this](Image image)
             {
                 if (!image.isValid())
                 {
@@ -1739,10 +1727,33 @@ struct SnapshotApp
                     return;
                 }
 
+                if (view.paletteOpen)
+                    drawImageOver(image, view.palette.renderToImage(snapshotScale));
+
                 image.save(FilePath {snapshotRequest.output});
                 Apps::quit(0);
             });
     }
+
+    // Straight-alpha "source over" of a same-sized `overlay` onto `base`.
+    static void drawImageOver(Image& base, const Image& overlay)
+    {
+        auto width = std::min(base.width(), overlay.width());
+        auto height = std::min(base.height(), overlay.height());
+
+        for (auto y = 0; y < height; ++y)
+        {
+            for (auto x = 0; x < width; ++x)
+            {
+                auto top = overlay.at(x, y);
+                auto bottom = base.at(x, y);
+                auto blend = [&](float over, float under) { return over * top.a + under * (1.f - top.a); };
+                base.set(x, y, {blend(top.r, bottom.r), blend(top.g, bottom.g), blend(top.b, bottom.b), 1.f});
+            }
+        }
+    }
+
+    static constexpr auto snapshotScale = 2.f;
 
     Browser browser;
     BrowserView view {browser};
@@ -1989,6 +2000,8 @@ SnapshotRequest parseSnapshotRequest(int argc, char* argv[])
     {
         if (std::string {argv[i]} == "--palette")
             request.palette = true;
+        else if (std::string {argv[i]} == "--size" && i + 1 < argc)
+            std::sscanf(argv[++i], "%dx%d", &request.width, &request.height);
         else if (std::string {argv[i]} == "--js" && i + 1 < argc)
             request.script = argv[++i];
         else

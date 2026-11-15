@@ -1,6 +1,6 @@
 // Build Release + install to %LOCALAPPDATA%\Programs\Grazer\Grazer.exe.
 //
-// Grazer.exe is the whole app: the web UI is embedded and WebView2's loader is
+// Grazer.exe is the whole app: WebView2's loader is
 // linked statically. A running installed Grazer is closed first (and the new
 // one launched after); dev builds are left alone. If the old exe is still
 // locked it is renamed aside to Grazer.exe.old, which Windows allows, and

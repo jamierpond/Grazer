@@ -34,10 +34,6 @@ update-deps:
 clean:
     node scripts/clean.mjs
 
-[doc('Run the palette UI vite dev server (configure with -DEACP_WEBVIEW_DEV=ON)')]
-web-dev:
-    node scripts/web-dev.mjs
-
 [doc('Rebuild Assets/Icon/Icon.png + Icon.ico from Source.png (needs ImageMagick 7)')]
 icon:
     bash scripts/make-icons.sh
