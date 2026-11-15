@@ -130,8 +130,8 @@
       "usesGitLfs": false
     },
     {
-      "commit": "cb4be08d15a5b75d98f63e1e79bc3f4ccd1fe5a1",
-      "hash": "decece9e4ea1c53f41e4b6ad95f7e90719200b31c53d40558c1e885d65c4eb2d",
+      "commit": "f87f826b2bbceb6f4a4f77895799d0284c7af2ef",
+      "hash": "b4a8ea5cb116a820b8175c7989bc18c7ed0e09c4d31e61fd8bbceb3b69502c30",
       "kind": "git",
       "name": "eacp",
       "patches": [],
@@ -178,6 +178,22 @@
       "usesGitLfs": false
     },
     {
+      "commit": "4e9b368bfc071e97206ea5c6adba68dd0cbf8897",
+      "hash": "d24808a20ae66a97f67f56f72ebcb56a201b3391d052c701012f1b49838030fc",
+      "kind": "git",
+      "name": "stb",
+      "patches": [],
+      "requestedRef": "4e9b368bfc071e97206ea5c6adba68dd0cbf8897",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/nothings/stb.git",
+      "usesGitLfs": false
+    },
+    {
       "commit": "666d4186c9815da94b0823dbd2d6b0c7e8c093d8",
       "hash": "6362d5137fa4ee3a6661fdc277862e2d8db1981de712516ccb6c516500a18966",
       "kind": "git",
@@ -210,6 +226,6 @@
       "usesGitLfs": false
     }
   ],
-  "root": "090f7aa5ca24fa9eaa87381a182b7ab543d254e4f5f099a4d1d6d112f7913071",
+  "root": "02e8dda6dd7c1fe5e0f997aa56692c6f4d4692597cea14ea512530b9a51a8894",
   "version": 1
 }

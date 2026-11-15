@@ -2169,7 +2169,7 @@ int main(int argc, char* argv[])
 
     // Every mode below but a plain launch prints, if only an error.
     if (argc > 1 && std::string {argv[1]}.starts_with("--"))
-        Console::attachToParent();
+        ::Console::attachToParent();
 
     if (argc >= 4 && std::string {argv[1]} == "--snapshot")
         return runSnapshot(argc, argv);

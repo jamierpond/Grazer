@@ -539,7 +539,8 @@ void PalettePanel::setNormalMode(bool isNormal)
 {
     normalMode = isNormal;
     // The thin caret is drawn in the accent colour: hidden under the block.
-    query.setAccentColour(isNormal ? Color::transparent() : UI::defaultTheme().accent);
+    query.setAccentColour(isNormal ? Color::transparent()
+                                   : UI::defaultTheme().get(UI::ThemeKeys::accent));
     // Always: the block follows the caret, and the field's own repaint skips this panel.
     repaint();
 }
