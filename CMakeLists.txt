@@ -32,6 +32,15 @@ lockstep_add_package(
         GIT_TAG main
         SYSTEM YES)
 
+# Crash reports (Crashout): Grazer writes one to
+# <app support>/Grazer/Crashes/pending/<id>/ when it crashes, which
+# scripts/crash-reports.py lists. Its handler exists on macOS and Windows only.
+lockstep_add_package(
+        NAME Crashout
+        GITHUB_REPOSITORY jamierpond/Crashout
+        GIT_TAG main
+        SYSTEM YES)
+
 list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 
 # Publishes Grazer's tabs to Rudder (the app switcher) as contexts, so a tab is
@@ -83,6 +92,19 @@ target_link_libraries(GrazerBrowser PUBLIC emberstore FrecencySearch SearchKeys 
 # picked as the default browser and gets the URLs macOS opens with it.
 set(EACP_MACOS_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/macOSBundleInfo.plist.in"
         CACHE INTERNAL "eacp macOS bundle Info.plist template")
+
+# Stamp the git SHA into a generated header on every build, so each crash
+# report says which commit Grazer was built from.
+set(GRAZER_VERSION_HEADER ${PROJECT_BINARY_DIR}/generated/GrazerVersion.h)
+add_custom_target(GrazerVersion
+        BYPRODUCTS ${GRAZER_VERSION_HEADER}
+        COMMAND ${CMAKE_COMMAND}
+                -DSRC=${CMAKE_SOURCE_DIR}
+                -DIN=${CMAKE_SOURCE_DIR}/Source/Version.h.in
+                -DOUT=${GRAZER_VERSION_HEADER}
+                -DGRAZER_PROJECT_VERSION=${PROJECT_VERSION}
+                -P ${CMAKE_SOURCE_DIR}/cmake/GitVersion.cmake
+        COMMENT "Stamping git version")
 
 add_executable(Grazer Source/Main.cpp Source/LoadingBackdrop.cpp Source/PaletteView.cpp)
 
@@ -142,6 +164,14 @@ include(cmake/GrazerPasskeys.cmake)
 grazer_enable_passkeys(Grazer audio.pond.grazer)
 
 target_link_libraries(Grazer PRIVATE PondApp RudderClient)
+
+add_dependencies(Grazer GrazerVersion)
+target_include_directories(Grazer PRIVATE ${PROJECT_BINARY_DIR}/generated)
+
+if (APPLE OR WIN32)
+    eacp_enable_crash_reporting(Grazer SYMBOLS_DIR ${PROJECT_BINARY_DIR}/symbols)
+    target_link_libraries(Grazer PRIVATE eacp-crash-faults)
+endif ()
 
 if (PROJECT_IS_TOP_LEVEL)
     enable_testing()

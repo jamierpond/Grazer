@@ -1,7 +1,9 @@
 // Build Release + install to %LOCALAPPDATA%\Programs\Grazer\Grazer.exe.
 //
 // Grazer.exe is the whole app: WebView2's loader is
-// linked statically. A running installed Grazer is closed first (and the new
+// linked statically. Beside it goes eacp-windows-error-reporting-helper.dll,
+// which Windows Error Reporting loads to report the crashes no in-process
+// handler sees (fast-fail, heap corruption). A running installed Grazer is closed first (and the new
 // one launched after); dev builds are left alone. If the old exe is still
 // locked it is renamed aside to Grazer.exe.old, which Windows allows, and
 // removed on the next install.
@@ -21,6 +23,7 @@ import { RELEASE_BUILD_DIR, buildTarget, lockstepSourceArgs, main, run } from '.
 const DIR = join(process.env.LOCALAPPDATA, 'Programs', 'Grazer');
 const EXE = join(DIR, 'Grazer.exe');
 const OLD = `${EXE}.old`;
+const WINDOWS_ERROR_REPORTING_HELPER = 'eacp-windows-error-reporting-helper.dll';
 
 // Run a PowerShell script without a shell in between to mangle its quoting.
 function powershell(script) {
@@ -113,6 +116,8 @@ await main(async () => {
 
   quitInstalled();
   copyExe(join(RELEASE_BUILD_DIR, 'Grazer.exe'));
+  copyFileSync(join(RELEASE_BUILD_DIR, WINDOWS_ERROR_REPORTING_HELPER),
+    join(DIR, WINDOWS_ERROR_REPORTING_HELPER));
   addShortcuts();
   registerAsBrowser();
 
