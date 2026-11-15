@@ -777,6 +777,7 @@ struct BrowserView final : View
 
         paletteOpen = false;
         originTab = nullptr;
+        previewDirty = false;
         palette.removeFromParent();
 
         if (activeTab != nullptr)
@@ -793,6 +794,7 @@ struct BrowserView final : View
         paletteSelected = findDefaultSelection(paletteFiltered);
         LOG("palette query \"", text, "\" lists ", paletteFiltered.size(), " rows");
         publishResults();
+        previewDirty = true;
     }
 
     std::optional<GoItem> getHighlightedRow() const
@@ -830,6 +832,41 @@ struct BrowserView final : View
             ": ",
             describePaletteRow(paletteFiltered[(size_t) paletteSelected]));
         publishResults();
+        previewDirty = false;
+        previewSelected();
+    }
+
+    void previewSelected()
+    {
+        if (!paletteOpen)
+            return;
+
+        if (auto row = getHighlightedRow())
+            previewItem(*row);
+    }
+
+    // Typing debounce: setPaletteQuery only marks the preview dirty; this 8 Hz
+    // tick applies it, so a fast typist doesn't load a page per keystroke.
+    void handlePreviewTick()
+    {
+        if (!previewDirty)
+            return;
+
+        previewDirty = false;
+        previewSelected();
+    }
+
+    // Selection moved in the palette: switching between OPEN tabs previews
+    // live underneath (it's free), so Enter only dismisses. Places that
+    // aren't open would cost a page load per selection change, so they only
+    // load when actually chosen (Enter / click).
+    void previewItem(const GoItem& item)
+    {
+        if (!paletteOpen || item.tabId < 0)
+            return;
+
+        if (auto* tab = findTab(item.tabId))
+            switchTo(*tab);
     }
 
     // Enter / ⌘Enter: open the highlighted row. With none, nothing happens.
@@ -862,7 +899,7 @@ struct BrowserView final : View
     void openItem(const GoItem& item, bool inNewTab)
     {
         auto opening = decidePaletteOpening(item, paletteMode, inNewTab);
-        auto* current = activeTab;
+        auto* startingTab = originTab;
         hidePalette();
 
         if (opening == PaletteOpening::switchToTab)
@@ -872,17 +909,31 @@ struct BrowserView final : View
             if (auto* tab = findTab(item.tabId))
                 switchTo(*tab);
         }
-        else if (current != nullptr
-                 && (opening == PaletteOpening::loadInThisTab || isHomeURL(current->url)))
-        {
-            LOG("palette opens: load in tab ", current->id, " ", item.url);
-            navigateTabTo(*current, item.url);
-        }
         else
+            openRowFrom(startingTab, item, opening);
+    }
+
+    // "This tab" is the one the palette opened over, even when a previewed tab
+    // is showing; a Home tab is always replaced.
+    void openRowFrom(Tab* startingTab, const GoItem& item, PaletteOpening opening)
+    {
+        if (startingTab == nullptr)
         {
-            LOG("palette opens: new tab ", item.url);
             openTab(item.url);
+            return;
         }
+
+        switchTo(*startingTab);
+
+        if (opening == PaletteOpening::loadInThisTab || isHomeURL(startingTab->url))
+        {
+            LOG("palette opens: load in tab ", startingTab->id, " ", item.url);
+            navigateTabTo(*startingTab, item.url);
+            return;
+        }
+
+        LOG("palette opens: new tab ", item.url);
+        openTab(item.url);
     }
 
     void cancelPalette()
@@ -1142,6 +1193,7 @@ struct BrowserView final : View
     std::int64_t& nextTabId = browser.nextTabId;
     std::int64_t generation = 0;
     bool paletteOpen = false;
+    bool previewDirty = false;
     PaletteMode paletteMode = PaletteMode::goFromHere;
     int paletteSelected = -1;
     std::string paletteQuery;
@@ -1149,6 +1201,7 @@ struct BrowserView final : View
     std::vector<GoItem> paletteFiltered;
     WebView chromeBar {getWebViewOptions()};
     PaletteView palette;
+    Threads::Timer previewTimer {[this] { handlePreviewTick(); }, 8};
 
     static constexpr auto idleTabCheckInterval = Time::MS {5 * 60 * 1000};
     Threads::Timer idleTabTimer {[this] { closeIdleTabs(); }, idleTabCheckInterval};
