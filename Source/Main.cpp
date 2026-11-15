@@ -1674,7 +1674,7 @@ struct GrazerApp
 
 // --- Snapshot ------------------------------------------------------------------
 
-// `Grazer --snapshot <out.png> [--palette] [--size <w>x<h>] [--js <script>] <url>...`: open the
+// `Grazer --snapshot <out.png> [--palette | --palette-normal] [--size <w>x<h>] [--js <script>] <url>...`: open the
 // URLs as tabs (the last one in front) in a window of that size (1400x900 by default),
 // wait for every page to load and settle, optionally open the palette over it,
 // and save the window's own rendering -- chrome bar, page and palette -- as a PNG. Real Grazer
@@ -1687,6 +1687,8 @@ struct SnapshotRequest
     std::vector<std::string> urls;
     std::string script;
     bool palette = false;
+    // The palette as Esc leaves it: normal mode, block caret, NORMAL label.
+    bool paletteInNormalMode = false;
     int width = 1400;
     int height = 900;
 };
@@ -1737,11 +1739,22 @@ struct SnapshotApp
         if (snapshotRequest.palette && !view.paletteOpen)
         {
             view.showPalette(PaletteMode::goFromHere, "snapshot --palette");
+            enterPaletteNormalModeIfRequested();
             settledTicks = 6;
             return;
         }
 
         captureSnapshot();
+    }
+
+    void enterPaletteNormalModeIfRequested()
+    {
+        if (!snapshotRequest.paletteInNormalMode)
+            return;
+
+        auto escape = Graphics::KeyEvent {};
+        escape.keyCode = Graphics::KeyCode::Escape;
+        view.palette.keyDown(escape);
     }
 
     bool isAnyTabLoading()
@@ -2072,6 +2085,8 @@ SnapshotRequest parseSnapshotRequest(int argc, char* argv[])
     {
         if (std::string {argv[i]} == "--palette")
             request.palette = true;
+        else if (std::string {argv[i]} == "--palette-normal")
+            request.palette = request.paletteInNormalMode = true;
         else if (std::string {argv[i]} == "--size" && i + 1 < argc)
             parseSnapshotSize(argv[++i], request);
         else if (std::string {argv[i]} == "--js" && i + 1 < argc)

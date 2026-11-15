@@ -3,6 +3,7 @@ add_executable(GrazerTests
         ErrorPageTests.cpp
         HistoryTests.cpp
         MruTests.cpp
+        PaletteKeysTests.cpp
         PaletteTests.cpp
         PaletteSpeedTests.cpp
         PlacesTests.cpp

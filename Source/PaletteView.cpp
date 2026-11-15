@@ -217,6 +217,115 @@ const auto controlKeyActions = std::vector<KeyBinding> {
     {Graphics::KeyCode::W, PaletteKeyAction::closeTabRow},
 };
 
+// eacp's TextEditor draws its text this far in from its left edge
+// (editorTextInset in Widgets.cpp); the block caret has to land on the same
+// glyphs.
+constexpr auto editorTextInset = 6.f;
+constexpr auto blockCaretAlpha = 0.55f;
+constexpr auto blockCaretVerticalInset = 3.f;
+constexpr auto modeLabelFontSize = 10.f;
+constexpr auto modeLabelRightInset = 4.f;
+// Far enough past either end of any list that moveSelection clamps to it.
+constexpr auto pastEveryRow = 1'000'000;
+
+// The character the block covers: the one after the caret, or a space at
+// the end of the text so the block still has a width.
+std::string getCharacterUnderCaret(const std::string& text, int caret)
+{
+    if (caret >= (int) text.size())
+        return " ";
+
+    auto start = (std::size_t) caret;
+    auto next = findCharacterStart(text, start + 1);
+    return text.substr(start, next - start);
+}
+
+// The editor's own rule: scroll only as far as it takes to keep the caret in view.
+float scrollToShowCaret(float caretX, float visibleWidth, float currentScroll)
+{
+    if (visibleWidth <= 0.f)
+        return currentScroll;
+
+    return std::max(0.f, std::clamp(currentScroll, caretX - visibleWidth, caretX));
+}
+
+bool hasControlCharacter(const std::string& text)
+{
+    return std::any_of(text.begin(), text.end(), [](char c)
+                       { return (unsigned char) c < 0x20 || c == 0x7f; });
+}
+
+// macOS gives arrows and function keys private-use code points, U+F700 to U+F8FF.
+bool isFunctionKeyCharacter(const std::string& text)
+{
+    if (text.size() < 3 || (unsigned char) text[0] != 0xEF)
+        return false;
+
+    auto second = (unsigned char) text[1];
+    return second >= 0x9C && second <= 0xA3;
+}
+
+bool isCommandOrControlHeld(const Graphics::ModifierKeys& modifiers)
+{
+    return modifiers.command || modifiers.control;
+}
+
+// What a key press types, if anything: no chords, no control characters and
+// no function keys.
+std::optional<std::string> getTypedText(const Graphics::KeyEvent& event)
+{
+    auto& text = event.characters;
+
+    if (isCommandOrControlHeld(event.modifiers) || text.empty())
+        return std::nullopt;
+
+    if (hasControlCharacter(text) || isFunctionKeyCharacter(text))
+        return std::nullopt;
+
+    return text;
+}
+
+struct SpecialKeyBinding
+{
+    std::uint16_t keyCode;
+    searchkeys::SpecialKey special;
+};
+
+const auto specialKeyBindings = std::vector<SpecialKeyBinding> {
+    {Graphics::KeyCode::Escape, searchkeys::SpecialKey::escape},
+    {Graphics::KeyCode::Return, searchkeys::SpecialKey::enter},
+    {Graphics::KeyCode::UpArrow, searchkeys::SpecialKey::upArrow},
+    {Graphics::KeyCode::DownArrow, searchkeys::SpecialKey::downArrow},
+};
+
+searchkeys::SpecialKey getSpecialKey(std::uint16_t keyCode)
+{
+    for (auto& binding: specialKeyBindings)
+        if (binding.keyCode == keyCode)
+            return binding.special;
+
+    return searchkeys::SpecialKey::none;
+}
+
+searchkeys::Key makeSearchKey(const Graphics::KeyEvent& event)
+{
+    auto key = searchkeys::Key {};
+    key.special = getSpecialKey(event.keyCode);
+    key.characters = getTypedText(event).value_or("");
+    key.command = event.modifiers.command;
+    key.control = event.modifiers.control;
+    key.alt = event.modifiers.alt;
+    return key;
+}
+
+std::string_view getModeName(const searchkeys::State& state)
+{
+    if (searchkeys::isNormalMode(state))
+        return "normal";
+
+    return "insert";
+}
+
 std::optional<PaletteKeyAction> findKeyAction(const std::vector<KeyBinding>& bindings,
                                               std::uint16_t keyCode)
 {
@@ -430,11 +539,10 @@ bool PaletteRows::mouseWheelMove(const UI::MouseEvent& event)
 
 PalettePanel::PalettePanel()
 {
-    auto font = Text::Font {};
-    font.family = queryFontFamily;
-    font.pointSize = queryFontSize;
+    queryFont.family = queryFontFamily;
+    queryFont.pointSize = queryFontSize;
 
-    query.setFont(font);
+    query.setFont(queryFont);
     query.setDrawsFrame(false);
     query.setPlaceholder("Go to a place, tab, search, or URL…");
     query.setColour(textColour);
@@ -458,6 +566,65 @@ void PalettePanel::paint(UI::Graphics& g)
     g.drawRoundedRect(getLocalBounds(), panelCornerRadius);
     g.setColour(dividerColour);
     g.fillRect({0.f, queryHeight - 1.f, getWidth(), 1.f});
+}
+
+void PalettePanel::setNormalMode(bool isNormal)
+{
+    if (normalMode == isNormal)
+        return;
+
+    normalMode = isNormal;
+    // The thin caret is drawn in the accent colour: hidden under the block.
+    query.setAccentColour(isNormal ? Color::transparent() : UI::defaultTheme().accent);
+    repaint();
+}
+
+void PalettePanel::paintOverChildren(UI::Graphics& g)
+{
+    if (!normalMode)
+        return;
+
+    paintBlockCaret(g);
+    paintModeLabel(g);
+}
+
+void PalettePanel::paintBlockCaret(UI::Graphics& g)
+{
+    auto scope = UI::Graphics::ScopedState {g};
+    auto field = query.getBounds();
+    g.setFont(queryFont);
+
+    auto& content = query.getText();
+    auto caret = std::clamp(query.getCaretPosition(), 0, (int) content.size());
+    auto textBeforeCaret = std::string_view(content).substr(0, (std::size_t) caret);
+    auto caretX = g.measureText(textBeforeCaret);
+    auto visibleWidth = field.w - editorTextInset * 2.f;
+    blockScroll = scrollToShowCaret(caretX, visibleWidth, blockScroll);
+
+    auto blockWidth = g.measureText(getCharacterUnderCaret(content, caret));
+    auto left = field.x + editorTextInset - blockScroll + caretX;
+
+    g.setColour(textColour.withAlpha(blockCaretAlpha));
+    g.fillRect({left,
+                field.y + blockCaretVerticalInset,
+                blockWidth,
+                field.h - blockCaretVerticalInset * 2.f});
+}
+
+void PalettePanel::paintModeLabel(UI::Graphics& g)
+{
+    auto scope = UI::Graphics::ScopedState {g};
+    auto field = query.getBounds();
+    auto labelFont = queryFont;
+    labelFont.pointSize = modeLabelFontSize;
+    g.setFont(labelFont);
+
+    constexpr auto label = std::string_view("NORMAL");
+    auto labelWidth = g.measureText(label);
+    auto baseline = field.y + (field.h - g.lineHeight()) * 0.5f + g.ascent();
+
+    g.setColour(dimTextColour);
+    g.drawText(label, {field.x + field.w - labelWidth - modeLabelRightInset, baseline});
 }
 
 // --- PaletteBackdrop -------------------------------------------------------------
@@ -531,6 +698,8 @@ void PaletteView::setResults(const GoResults& results)
         shownGeneration = shown.generation;
         panel.query.setText(shown.query);
         panel.query.selectAll();
+        searchKeysState = searchkeys::getOpeningState();
+        panel.setNormalMode(false);
     }
 
     backdrop.resized();
@@ -600,6 +769,8 @@ void PaletteView::runPaletteKeyAction(PaletteKeyAction action)
     auto handlers = std::map<PaletteKeyAction, std::function<void()>> {
         {PaletteKeyAction::moveDown, [this] { onMoveSelection(1); }},
         {PaletteKeyAction::moveUp, [this] { onMoveSelection(-1); }},
+        {PaletteKeyAction::moveToFirst, [this] { onMoveSelection(-pastEveryRow); }},
+        {PaletteKeyAction::moveToLast, [this] { onMoveSelection(pastEveryRow); }},
         {PaletteKeyAction::toggleStar, [this] { runOnHighlightedRow(canStarRow, onToggleBookmark); }},
         {PaletteKeyAction::closeRow, [this] { runOnHighlightedRow(canCloseRow, onCloseItem); }},
         {PaletteKeyAction::closeTabRow, [this] { runOnHighlightedRow(isOpenTabRow, onCloseTabRow); }},
@@ -612,8 +783,52 @@ void PaletteView::runPaletteKeyAction(PaletteKeyAction action)
     handlers.at(action)();
 }
 
+// Vim modes from Rudder's SearchKeys come first; a key they pass through is
+// handled as before modes existed.
+bool PaletteView::handleSearchKey(const Graphics::KeyEvent& event)
+{
+    auto& query = backdrop.panel.query;
+    auto current = searchKeysState;
+    current.text = query.getText();
+    current.caret = query.getCaretPosition();
+
+    auto result = searchkeys::handleKey(current, makeSearchKey(event));
+
+    if (result.action == searchkeys::Action::passThrough)
+        return false;
+
+    applySearchState(result.state);
+
+    if (auto action = grazer::getPaletteKeyAction(result.action))
+    {
+        LOG("palette ", getModeName(result.state), " mode: ", grazer::getPaletteKeyActionName(*action));
+        runPaletteKeyAction(*action);
+    }
+
+    return true;
+}
+
+void PaletteView::applySearchState(const searchkeys::State& state)
+{
+    auto& panel = backdrop.panel;
+
+    if (searchkeys::isNormalMode(state) != searchkeys::isNormalMode(searchKeysState))
+        LOG("palette enters ", getModeName(state), " mode");
+
+    // A text change re-filters exactly as typing does.
+    if (state.text != panel.query.getText())
+        panel.query.setText(state.text, true);
+
+    panel.query.setCaretPosition(state.caret);
+    panel.setNormalMode(searchkeys::isNormalMode(state));
+    searchKeysState = state;
+}
+
 void PaletteView::keyDown(const Graphics::KeyEvent& event)
 {
+    if (handleSearchKey(event))
+        return;
+
     if (auto action = findPaletteKeyAction(event))
         runPaletteKeyAction(*action);
     else

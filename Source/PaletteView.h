@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PaletteKeys.h"
 #include "Types.h"
 
 #include <eacp/UI/UI.h>
@@ -9,19 +10,7 @@
 #include <string>
 #include <vector>
 
-// What a key does in the palette before the query field sees it.
-enum class PaletteKeyAction
-{
-    moveDown,
-    moveUp,
-    toggleStar,
-    closeRow,
-    closeTabRow,
-    complete,
-    activate,
-    activateInNewTab,
-    cancel,
-};
+using grazer::PaletteKeyAction;
 
 // The Go palette's rows: kind marker, title over a grey URL, the kind in words,
 // and ★ / ✕ on the right. Painted by hand, the way Rudder's ResultsList is, so
@@ -75,12 +64,24 @@ public:
     PalettePanel();
 
     void paint(eacp::UI::Graphics& g) override;
+    void paintOverChildren(eacp::UI::Graphics& g) override;
     void resized() override;
+
+    // Normal mode swaps the query's thin caret for a block and shows "NORMAL".
+    void setNormalMode(bool isNormal);
 
     eacp::UI::TextEditor query;
     PaletteRows rows;
 
     static constexpr auto queryHeight = 52.f;
+
+private:
+    void paintBlockCaret(eacp::UI::Graphics& g);
+    void paintModeLabel(eacp::UI::Graphics& g);
+
+    eacp::Text::Font queryFont;
+    bool normalMode = false;
+    float blockScroll = 0.f;
 };
 
 // The whole window while the palette is open: a dim cover over the page (a
@@ -129,6 +130,8 @@ public:
     std::function<void(const GoItem&)> onToggleBookmark = [](auto&) {};
 
 private:
+    bool handleSearchKey(const eacp::Graphics::KeyEvent& event);
+    void applySearchState(const searchkeys::State& state);
     std::optional<PaletteKeyAction> findPaletteKeyAction(const eacp::Graphics::KeyEvent& event) const;
     void runPaletteKeyAction(PaletteKeyAction action);
     void runOnHighlightedRow(bool (*isAllowed)(const GoItem&),
@@ -140,4 +143,5 @@ private:
     PaletteBackdrop backdrop;
     GoResults shown;
     std::int64_t shownGeneration = -1;
+    searchkeys::State searchKeysState = searchkeys::getOpeningState();
 };
