@@ -12,7 +12,6 @@ namespace
 {
 constexpr auto tightPerLetter = 4;
 constexpr std::size_t maxHitRows = 50;
-constexpr std::size_t maxRecentHistoryRows = 50;
 
 int letterCount(const std::string& query)
 {
@@ -68,28 +67,6 @@ std::vector<GoItem> appendHistoryRows(const std::vector<GoItem>& items,
         entries.push_back(&entry);
 
     return appendHistoryRows(items, entries);
-}
-
-std::vector<GoItem> appendRecentHistory(const std::vector<GoItem>& items,
-                                        const std::vector<HistoryEntry>& history)
-{
-    auto entries = std::vector<const HistoryEntry*> {};
-
-    for (auto& entry: history)
-        entries.push_back(&entry);
-
-    std::stable_sort(entries.begin(),
-                     entries.end(),
-                     [](const HistoryEntry* a, const HistoryEntry* b)
-                     { return a->lastVisit > b->lastVisit; });
-
-    auto withHistory = appendHistoryRows(items, entries);
-    auto limit = items.size() + maxRecentHistoryRows;
-
-    if (withHistory.size() > limit)
-        withHistory.resize(limit);
-
-    return withHistory;
 }
 
 std::vector<std::pair<int, const GoItem*>> scoreHits(const std::vector<GoItem>& candidates,
@@ -157,7 +134,7 @@ std::vector<GoItem> rankPalette(const std::vector<GoItem>& all,
                                 const std::string& query)
 {
     if (query.empty())
-        return appendRecentHistory(all, history);
+        return all;
 
     auto candidates = appendHistoryRows(all, history);
     auto scored = scoreHits(candidates, query);
