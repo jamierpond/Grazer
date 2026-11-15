@@ -12,7 +12,6 @@ struct SearchActionOutcome
     PaletteKeyAction paletteAction;
 };
 
-// dd / x close the row the way its ✕ does: a tab closes, history is forgotten.
 constexpr auto searchActionOutcomes = std::array {
     SearchActionOutcome {searchkeys::Action::moveHighlightDown, PaletteKeyAction::moveDown},
     SearchActionOutcome {searchkeys::Action::moveHighlightUp, PaletteKeyAction::moveUp},
@@ -21,7 +20,6 @@ constexpr auto searchActionOutcomes = std::array {
     SearchActionOutcome {searchkeys::Action::openHighlighted, PaletteKeyAction::activate},
     SearchActionOutcome {searchkeys::Action::openHighlightedInNewTab,
                          PaletteKeyAction::activateInNewTab},
-    SearchActionOutcome {searchkeys::Action::closeHighlighted, PaletteKeyAction::closeRow},
     SearchActionOutcome {searchkeys::Action::starHighlighted, PaletteKeyAction::toggleStar},
     SearchActionOutcome {searchkeys::Action::closeSearch, PaletteKeyAction::cancel},
 };

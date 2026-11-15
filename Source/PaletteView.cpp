@@ -197,10 +197,6 @@ struct KeyBinding
 };
 
 const auto plainKeyActions = std::vector<KeyBinding> {
-    {Graphics::KeyCode::Return, PaletteKeyAction::activate},
-    {Graphics::KeyCode::Escape, PaletteKeyAction::cancel},
-    {Graphics::KeyCode::DownArrow, PaletteKeyAction::moveDown},
-    {Graphics::KeyCode::UpArrow, PaletteKeyAction::moveUp},
     {Graphics::KeyCode::Tab, PaletteKeyAction::complete},
 };
 
@@ -293,6 +289,12 @@ const auto specialKeyBindings = std::vector<SpecialKeyBinding> {
     {Graphics::KeyCode::Return, searchkeys::SpecialKey::enter},
     {Graphics::KeyCode::UpArrow, searchkeys::SpecialKey::upArrow},
     {Graphics::KeyCode::DownArrow, searchkeys::SpecialKey::downArrow},
+    {Graphics::KeyCode::LeftArrow, searchkeys::SpecialKey::leftArrow},
+    {Graphics::KeyCode::RightArrow, searchkeys::SpecialKey::rightArrow},
+    {Graphics::KeyCode::Delete, searchkeys::SpecialKey::backspace},
+    {Graphics::KeyCode::ForwardDelete, searchkeys::SpecialKey::forwardDelete},
+    {Graphics::KeyCode::Home, searchkeys::SpecialKey::home},
+    {Graphics::KeyCode::End, searchkeys::SpecialKey::end},
 };
 
 searchkeys::SpecialKey getSpecialKey(std::uint16_t keyCode)
@@ -315,9 +317,9 @@ searchkeys::Key makeSearchKey(const Graphics::KeyEvent& event)
     return key;
 }
 
-std::string_view getModeName(const searchkeys::State& state)
+std::string_view getModeName(const searchkeys::SearchBox& box)
 {
-    if (searchkeys::isNormalMode(state))
+    if (box.isNormalMode())
         return "normal";
 
     return "insert";
@@ -695,7 +697,7 @@ void PaletteView::setResults(const GoResults& results)
         shownGeneration = shown.generation;
         panel.query.setText(shown.query);
         panel.query.selectAll();
-        searchKeysState = searchkeys::getOpeningState();
+        searchBox = {};
         panel.setNormalMode(false);
     }
 
@@ -779,57 +781,66 @@ void PaletteView::runPaletteKeyAction(PaletteKeyAction action)
     handlers.at(action)();
 }
 
-// Vim modes from Rudder's SearchKeys come first; a key they pass through is
-// handled as before modes existed.
+// The opening query is selected: typing or deleting replaces it, as in any text field.
+bool PaletteView::isEditOfSelectedText(const Graphics::KeyEvent& event) const
+{
+    if (!backdrop.panel.query.hasSelection() || searchBox.isNormalMode())
+        return false;
+
+    auto key = makeSearchKey(event);
+    auto isDeletion = key.special == searchkeys::SpecialKey::backspace
+                      || key.special == searchkeys::SpecialKey::forwardDelete;
+    return isDeletion || (key.special == searchkeys::SpecialKey::none && !key.characters.empty());
+}
+
+// The query field is a one-line vim editor from Rudder's SearchKeys; a key it
+// passes through goes to the field as before.
 bool PaletteView::handleSearchKey(const Graphics::KeyEvent& event)
 {
     auto& query = backdrop.panel.query;
-    auto current = searchKeysState;
-    current.text = query.getText();
-    current.caret = query.getCaretPosition();
+    // The field may have changed under the box: completion, a click, a replaced selection.
+    searchBox.setTextAndCaret(query.getText(), query.getCaretPosition());
 
-    auto result = searchkeys::handleKey(current, makeSearchKey(event));
-
-    if (result.action == searchkeys::Action::passThrough)
+    if (isEditOfSelectedText(event))
         return false;
 
-    applySearchState(result.state);
+    auto searchAction = searchBox.handleKey(makeSearchKey(event));
 
-    if (auto action = grazer::getPaletteKeyAction(result.action))
+    if (searchAction == searchkeys::Action::passThrough)
+        return false;
+
+    showSearchBox();
+
+    if (auto action = grazer::getPaletteKeyAction(searchAction))
     {
         LOG(sessionlog::formatEventLine(
             "palette.key",
-            {{"mode", getModeName(result.state)},
-             {"action", grazer::getPaletteKeyActionName(*action)}}));
+            {{"mode", getModeName(searchBox)}, {"action", grazer::getPaletteKeyActionName(*action)}}));
         runPaletteKeyAction(*action);
     }
 
     return true;
 }
 
-void PaletteView::applySearchState(const searchkeys::State& state)
+void PaletteView::showSearchBox()
 {
     auto& panel = backdrop.panel;
 
-    if (searchkeys::isNormalMode(state) != searchkeys::isNormalMode(searchKeysState))
-        LOG(sessionlog::formatEventLine("palette.mode", {{"mode", getModeName(state)}}));
+    if (searchBox.isNormalMode() != panel.isNormalMode())
+        LOG(sessionlog::formatEventLine("palette.mode", {{"mode", getModeName(searchBox)}}));
 
     // A text change re-filters exactly as typing does.
-    if (state.text != panel.query.getText())
-        panel.query.setText(state.text, true);
+    if (searchBox.getText() != panel.query.getText())
+        panel.query.setText(searchBox.getText(), true);
 
-    panel.query.setCaretPosition(state.caret);
-    panel.setNormalMode(searchkeys::isNormalMode(state));
-    searchKeysState = state;
+    panel.query.setCaretPosition(searchBox.getCaret());
+    panel.setNormalMode(searchBox.isNormalMode());
 }
 
 void PaletteView::keyDown(const Graphics::KeyEvent& event)
 {
-    if (handleSearchKey(event))
-        return;
-
     if (auto action = findPaletteKeyAction(event))
         runPaletteKeyAction(*action);
-    else
+    else if (!handleSearchKey(event))
         ComponentHost::keyDown(event);
 }

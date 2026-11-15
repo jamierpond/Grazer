@@ -22,8 +22,8 @@ enum class PaletteKeyAction
     cancel,
 };
 
-// The palette outcome for a vim-mode action from SearchKeys; none for
-// passThrough (the key is handled as before modes existed) and none.
+// The palette outcome for a list action from the SearchKeys search box; none
+// for passThrough (the palette's own keys, then the query field) and none (a text edit).
 std::optional<PaletteKeyAction> getPaletteKeyAction(searchkeys::Action action);
 
 std::string_view getPaletteKeyActionName(PaletteKeyAction action);

@@ -82,8 +82,8 @@
       "usesGitLfs": false
     },
     {
-      "commit": "5a7ffc680a3c198c27cd13ad383e94bd3327ddbf",
-      "hash": "e64d1640a943e2d9f16f7299a346996a69b84f710f290ddf8d46d8333ffcae89",
+      "commit": "ad2919d3df9234c2283a03d60f379de2c6cf44a3",
+      "hash": "58b507ccd951f950087d432705532679c2c7e69450fef270cc765be16b7fdc0e",
       "kind": "git",
       "name": "Rudder",
       "patches": [],
@@ -178,6 +178,22 @@
       "usesGitLfs": false
     },
     {
+      "commit": "80e12cfdaf8df67067d078388340d123c81e93fd",
+      "hash": "19b850f664d22008f431a31ae29c2703732d7d386a8b3cde170d2ba695d64ac7",
+      "kind": "git",
+      "name": "text-buffer",
+      "patches": [],
+      "requestedRef": "main",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/jamierpond/text-buffer.git",
+      "usesGitLfs": false
+    },
+    {
       "commit": "43c29e655cb8117fd9cfb65ad9cefe2d40965102",
       "hash": "be3c2defada9b5bb6aec7837e15406762bccfc7e3ab29741c5e14d7d91a806cd",
       "kind": "git",
@@ -194,6 +210,6 @@
       "usesGitLfs": false
     }
   ],
-  "root": "b6035c40f4f91f3ff2be57b31030c6582def107f7e2b514c28ce22dc5d965ef7",
+  "root": "c093953051f0c0a0bec368900ed0726a1d2d79fc4385dd676867219cb90821ea",
   "version": 1
 }

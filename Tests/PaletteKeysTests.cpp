@@ -26,28 +26,23 @@ searchkeys::Key makeSpecialKey(searchkeys::SpecialKey special)
 
 const auto escapeKey = makeSpecialKey(searchkeys::SpecialKey::escape);
 
-// Runs `keys` from a freshly opened palette holding `text` and returns the
-// palette outcome of the last key.
+// Runs `keys` in a freshly opened palette that has `text` typed, and returns
+// the palette outcome of the last key.
 std::optional<PaletteKeyAction> getOutcomeOfKeys(const std::string& text,
                                                  const std::vector<searchkeys::Key>& keys)
 {
-    auto state = searchkeys::getOpeningState();
-    state.text = text;
-    state.caret = (int) text.size();
+    auto box = searchkeys::SearchBox {};
+    box.setTextAndCaret(text, (int) text.size());
     auto action = searchkeys::Action::none;
 
     for (auto& key: keys)
-    {
-        auto result = searchkeys::handleKey(state, key);
-        state = result.state;
-        action = result.action;
-    }
+        action = box.handleKey(key);
 
     return getPaletteKeyAction(action);
 }
 } // namespace
 
-auto tTypingPassesThrough = test("PaletteKeys/typing in insert mode is left to the query field") = []
+auto tTypingEditsText = test("PaletteKeys/typing in insert mode edits the query, no palette outcome") = []
 {
     check(!getOutcomeOfKeys("", {makeTypedKey("j")}).has_value());
 };
@@ -62,7 +57,7 @@ auto tEscapeInNormalCancels = test("PaletteKeys/escape in normal mode cancels th
     check(getOutcomeOfKeys("git", {escapeKey, escapeKey}) == PaletteKeyAction::cancel);
 };
 
-auto tNormalKeys = test("PaletteKeys/normal mode keys reach the palette outcomes") = []
+auto tNormalKeys = test("PaletteKeys/normal mode list keys reach the palette outcomes") = []
 {
     auto expectations = std::vector<std::pair<std::vector<searchkeys::Key>, PaletteKeyAction>> {
         {{makeTypedKey("j")}, PaletteKeyAction::moveDown},
@@ -70,8 +65,6 @@ auto tNormalKeys = test("PaletteKeys/normal mode keys reach the palette outcomes
         {{makeTypedKey("g"), makeTypedKey("g")}, PaletteKeyAction::moveToFirst},
         {{makeTypedKey("G")}, PaletteKeyAction::moveToLast},
         {{makeSpecialKey(searchkeys::SpecialKey::enter)}, PaletteKeyAction::activate},
-        {{makeTypedKey("d"), makeTypedKey("d")}, PaletteKeyAction::closeRow},
-        {{makeTypedKey("x")}, PaletteKeyAction::closeRow},
         {{makeTypedKey("s")}, PaletteKeyAction::toggleStar},
     };
 
@@ -83,14 +76,16 @@ auto tNormalKeys = test("PaletteKeys/normal mode keys reach the palette outcomes
     }
 };
 
+auto tTextEditsHaveNoOutcome = test("PaletteKeys/x, dd and b edit the query instead of closing a row") = []
+{
+    check(!getOutcomeOfKeys("git", {escapeKey, makeTypedKey("x")}).has_value());
+    check(!getOutcomeOfKeys("git", {escapeKey, makeTypedKey("d"), makeTypedKey("d")}).has_value());
+    check(!getOutcomeOfKeys("git", {escapeKey, makeTypedKey("b")}).has_value());
+};
+
 auto tCommandEnterOpensInNewTab = test("PaletteKeys/command enter in normal mode opens in a new tab") = []
 {
     auto commandEnter = makeSpecialKey(searchkeys::SpecialKey::enter);
     commandEnter.command = true;
     check(getOutcomeOfKeys("git", {escapeKey, commandEnter}) == PaletteKeyAction::activateInNewTab);
-};
-
-auto tUnknownKeyDoesNothing = test("PaletteKeys/an unknown key in normal mode does nothing") = []
-{
-    check(!getOutcomeOfKeys("git", {escapeKey, makeTypedKey("q")}).has_value());
 };

@@ -69,6 +69,7 @@ public:
 
     // Normal mode swaps the query's thin caret for a block and shows "NORMAL".
     void setNormalMode(bool isNormal);
+    bool isNormalMode() const { return normalMode; }
 
     eacp::UI::TextEditor query;
     PaletteRows rows;
@@ -130,7 +131,8 @@ public:
 
 private:
     bool handleSearchKey(const eacp::Graphics::KeyEvent& event);
-    void applySearchState(const searchkeys::State& state);
+    void showSearchBox();
+    bool isEditOfSelectedText(const eacp::Graphics::KeyEvent& event) const;
     std::optional<PaletteKeyAction> findPaletteKeyAction(const eacp::Graphics::KeyEvent& event) const;
     void runPaletteKeyAction(PaletteKeyAction action);
     void runOnHighlightedRow(bool (*isAllowed)(const GoItem&),
@@ -142,5 +144,5 @@ private:
     PaletteBackdrop backdrop;
     GoResults shown;
     std::int64_t shownGeneration = -1;
-    searchkeys::State searchKeysState = searchkeys::getOpeningState();
+    searchkeys::SearchBox searchBox;
 };
