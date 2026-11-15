@@ -72,7 +72,7 @@ static constexpr auto openPaletteCommand = std::string_view {"openPalette:"};
 
 static std::string getPaletteOpeningKey(const std::string& command)
 {
-    return command.substr(openPaletteCommand.size()) + " key";
+    return "key-" + command.substr(openPaletteCommand.size());
 }
 
 // t opens the palette for a new tab; o to go from the current one.
@@ -209,6 +209,8 @@ struct BrowserView final : View
             "grazerChrome",
             [this](const std::string& command)
             {
+                logEvent("chrome.command", {{"command", command}});
+
                 if (command == "toggleMaximize")
                     onToggleMaximize();
                 else if (command == "back" && activeTab != nullptr)
@@ -434,7 +436,7 @@ struct BrowserView final : View
             });
 
         view.onClose = [this, t]
-        { Threads::callAsync([this, t] { closeTab(t, "the page closed itself"); }); };
+        { Threads::callAsync([this, t] { closeTab(t, "page-closed-itself"); }); };
     }
 
     // The http guard keeps loadHTML navigations (the error page) from
@@ -570,7 +572,7 @@ struct BrowserView final : View
             loadingBackdrop.hide();
     }
 
-    void closeActiveTab() { closeTab(activeTab, "File > Close Tab"); }
+    void closeActiveTab() { closeTab(activeTab, "menu-close-tab"); }
 
     bool mustTabStayOpen(Tab& tab)
     {
@@ -596,17 +598,19 @@ struct BrowserView final : View
                 idleTabs.push_back(tabs[(int) index]);
 
             for (auto* tab: idleTabs)
-                closeTab(tab, getIdleCloseReason(*tab));
+                closeIdleTab(*tab);
         }
 
         syncPalette();
     }
 
-    static std::string getIdleCloseReason(const Tab& tab)
+    void closeIdleTab(Tab& tab)
     {
-        auto idleMs = MruStore::nowMs() - tab.activatedAtMs.back();
-        return "unused for " + std::to_string(idleMs) + " ms, used "
-               + std::to_string(tab.activatedAtMs.size()) + " times";
+        logEvent("tab.idle",
+                 {{"tab", tab.id},
+                  {"idle-ms", MruStore::nowMs() - tab.activatedAtMs.back()},
+                  {"uses", tab.activatedAtMs.size()}});
+        closeTab(&tab, "idle");
     }
 
     void closeAllTabsExceptHome()
@@ -618,7 +622,7 @@ struct BrowserView final : View
                 pagesToClose.push_back(tab.get());
 
         for (auto* tab: pagesToClose)
-            closeTab(tab, "File > Close All Tabs");
+            closeTab(tab, "menu-close-all-tabs");
     }
 
     void closeTab(Tab* tab, const std::string& reason)
@@ -689,7 +693,7 @@ struct BrowserView final : View
     void closeTabById(std::int64_t id)
     {
         if (auto* tab = findTab(id))
-            closeTab(tab, "palette x");
+            closeTab(tab, "palette-close-row");
     }
 
     Tab* findTab(std::int64_t id)
@@ -709,6 +713,7 @@ struct BrowserView final : View
             return;
 
         auto next = (index + direction + tabs.size()) % tabs.size();
+        logEvent("tab.cycle", {{"direction", direction}, {"tab", tabs[next]->id}});
         mru.touch(normalizeURL(tabs[next]->url));
         switchTo(*tabs[next]);
     }
@@ -765,6 +770,7 @@ struct BrowserView final : View
         if (!paletteOpen)
             return;
 
+        logEvent("palette.hide");
         paletteOpen = false;
         originTab = nullptr;
         previewDirty = false;
@@ -1023,6 +1029,8 @@ struct BrowserView final : View
 
     void handleCommand(Tab& sender, const std::string& command)
     {
+        logEvent("page.command", {{"tab", sender.id}, {"command", command}});
+
         if (command == "locationChanged")
         {
             if (refreshTabURLFromWebView(sender))
@@ -1036,7 +1044,7 @@ struct BrowserView final : View
                 toggleBookmark(activeTab->title, activeTab->url);
         }
         else if (command == "closeTab")
-            Threads::callAsync([this] { closeTab(activeTab, "x key"); });
+            Threads::callAsync([this] { closeTab(activeTab, "key-x"); });
         else if (command == "nextTab")
             cycleTab(1);
         else if (command == "prevTab")
@@ -1086,6 +1094,8 @@ struct BrowserView final : View
         if (activeTab == nullptr || paletteOpen)
             return;
 
+        logEvent("find.call", {{"tab", activeTab->id}, {"call", call}});
+
         if (call == "open()")
             activeTab->view().focusContent();
 
@@ -1096,6 +1106,7 @@ struct BrowserView final : View
     // (finished downloads, etc.).
     void showToast(Tab& tab, const std::string& message)
     {
+        logEvent("toast.show", {{"tab", tab.id}, {"message", message}});
         auto script = std::string {"(() => {"}
                       + "const toast = document.createElement('div');"
                       + "toast.textContent = " + jsStringLiteral(message) + ";"
@@ -1405,12 +1416,24 @@ void Browser::saveSession()
 // never take the browser down, hence the swallowed IPC::Error.
 void Browser::setupControl()
 {
-    controlApi.onListTabs = [this] { return buildTabList(); };
-    controlApi.onFocusTab = [this](std::int64_t id) { return focusTabById(id); };
+    controlApi.onListTabs = [this]
+    {
+        logEvent("control.list-tabs");
+        return buildTabList();
+    };
+    controlApi.onFocusTab = [this](std::int64_t id)
+    {
+        logEvent("control.focus-tab", {{"tab", id}});
+        return focusTabById(id);
+    };
     controlApi.onOpenUrl = [this](const std::string& text)
-    { return openUrlFromControl(text); };
+    {
+        logEvent("control.open-url", {{"url", text}});
+        return openUrlFromControl(text);
+    };
     controlApi.onReactivate = [this]
     {
+        logEvent("control.reactivate");
         if (auto* window = frontWindow())
             window->raise();
 
@@ -1448,6 +1471,7 @@ void Browser::setupRudder()
     // and a raise from here would land late, over wherever the user went.
     rudder->onPreview = [this](const std::string& contextId)
     {
+        logEvent("rudder.preview", {{"context", contextId}});
         if (auto id = rudderTabId(contextId))
             if (auto [window, tab] = findTab(*id); tab != nullptr)
                 window->view.showTab(*tab);
@@ -1623,33 +1647,50 @@ struct GrazerApp
     {
         return {
             .reload = [this](bool bypassCache)
-            { runInFrontWindow([&](BrowserView& view) { view.reloadActiveTab(bypassCache); }); },
+            {
+                logEvent("menu.reload", {{"from-origin", bypassCache}});
+                runInFrontWindow([&](BrowserView& view) { view.reloadActiveTab(bypassCache); });
+            },
             .find = [this](const std::string& call)
-            { runInFrontWindow([&](BrowserView& view) { view.findInPage(call); }); },
-            .newWindow = [this] { browser.openWindow({}); },
+            {
+                logEvent("menu.find", {{"call", call}});
+                runInFrontWindow([&](BrowserView& view) { view.findInPage(call); });
+            },
+            .newWindow = [this]
+            {
+                logEvent("menu.new-window");
+                browser.openWindow({});
+            },
             .newTab = [this]
             {
                 runInFrontWindow(
                     [](BrowserView& view)
-                    { view.showPalette(PaletteMode::newTab, "File > New Tab (cmd-T)"); });
+                    { view.showPalette(PaletteMode::newTab, "menu-new-tab"); });
             },
             .openLocation = [this]
             {
                 runInFrontWindow(
                     [](BrowserView& view) {
-                        view.showPalette(PaletteMode::goFromHere,
-                                         "File > Open Location (cmd-L)");
+                        view.showPalette(PaletteMode::goFromHere, "menu-open-location");
                     });
             },
             .savePage = [this]
             {
+                logEvent("menu.save-page");
+
                 if (auto* page = getFrontWindowPage())
                     BrowserEngine::savePage(*page);
             },
             .closeTab = [this]
-            { runInFrontWindow([](BrowserView& view) { view.closeActiveTab(); }); },
+            {
+                logEvent("menu.close-tab");
+                runInFrontWindow([](BrowserView& view) { view.closeActiveTab(); });
+            },
             .closeAllTabs = [this]
-            { runInFrontWindow([](BrowserView& view) { view.closeAllTabsExceptHome(); }); },
+            {
+                logEvent("menu.close-all-tabs");
+                runInFrontWindow([](BrowserView& view) { view.closeAllTabsExceptHome(); });
+            },
             .activePage = [this] { return getFrontWindowPage(); }};
     }
 
@@ -1724,7 +1765,7 @@ struct SnapshotApp
 
         if (snapshotRequest.palette && !view.paletteOpen)
         {
-            view.showPalette(PaletteMode::goFromHere, "snapshot --palette");
+            view.showPalette(PaletteMode::goFromHere, "snapshot");
             enterPaletteNormalModeIfRequested();
             settledTicks = 6;
             return;
