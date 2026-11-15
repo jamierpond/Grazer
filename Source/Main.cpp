@@ -1381,59 +1381,47 @@ struct GrazerApp
         browser.start();
 
         // The menu bar is the app's, so its shortcuts act on the front window.
-        AppMenu::install(
-            browser.frontWindow()->window,
-            {.reload =
-                 [this](bool bypassCache)
-             {
-                 if (auto* window = browser.frontWindow())
-                     window->view.reloadActiveTab(bypassCache);
-             },
-             .find =
-                 [this](const std::string& call)
-             {
-                 if (auto* window = browser.frontWindow())
-                     window->view.findInPage(call);
-             },
-             .newWindow = [this] { browser.openWindow({}); },
-             .openLocation =
-                 [this]
-             {
-                 if (auto* window = browser.frontWindow())
-                     window->view.showPalette();
-             },
-             .savePage =
-                 [this]
-             {
-                 if (auto* window = browser.frontWindow())
-                 {
-                     if (auto* page = window->view.activePage())
-                         BrowserEngine::savePage(*page);
-                 }
-             },
-             .closeTab =
-                 [this]
-             {
-                 if (auto* window = browser.frontWindow())
-                     window->view.closeActiveTab();
-             },
-             .closeAllTabs =
-                 [this]
-             {
-                 if (auto* window = browser.frontWindow())
-                     window->view.closeAllTabsExceptHome();
-             },
-             .activePage = [this]() -> WebView*
-             {
-                 auto* window = browser.frontWindow();
-                 return window != nullptr ? window->view.activePage() : nullptr;
-             }});
+        AppMenu::install(browser.frontWindow()->window, getMenuActions());
 
         // URLs from the OS (a link opened with Grazer, `open -b audio.pond.grazer`,
         // `Grazer.exe <url>`) open as new tabs, like `--open-url`; ones that
         // launched Grazer waited in the queue for this window.
         OpenUrls::setHandler([this](const std::string& url)
                              { browser.openUrlFromControl(url); });
+    }
+
+    void runInFrontWindow(const std::function<void(BrowserView&)>& action)
+    {
+        if (auto* window = browser.frontWindow())
+            action(window->view);
+    }
+
+    WebView* getFrontWindowPage()
+    {
+        auto* window = browser.frontWindow();
+        return window != nullptr ? window->view.activePage() : nullptr;
+    }
+
+    AppMenu::Actions getMenuActions()
+    {
+        return {
+            .reload = [this](bool bypassCache)
+            { runInFrontWindow([&](BrowserView& view) { view.reloadActiveTab(bypassCache); }); },
+            .find = [this](const std::string& call)
+            { runInFrontWindow([&](BrowserView& view) { view.findInPage(call); }); },
+            .newWindow = [this] { browser.openWindow({}); },
+            .openLocation = [this]
+            { runInFrontWindow([](BrowserView& view) { view.showPalette(); }); },
+            .savePage = [this]
+            {
+                if (auto* page = getFrontWindowPage())
+                    BrowserEngine::savePage(*page);
+            },
+            .closeTab = [this]
+            { runInFrontWindow([](BrowserView& view) { view.closeActiveTab(); }); },
+            .closeAllTabs = [this]
+            { runInFrontWindow([](BrowserView& view) { view.closeAllTabsExceptHome(); }); },
+            .activePage = [this] { return getFrontWindowPage(); }};
     }
 
     Browser browser;
