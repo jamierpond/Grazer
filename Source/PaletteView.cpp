@@ -242,42 +242,6 @@ float scrollToShowCaret(float caretX, float visibleWidth, float currentScroll)
     return std::max(0.f, std::clamp(currentScroll, caretX - visibleWidth, caretX));
 }
 
-bool hasControlCharacter(const std::string& text)
-{
-    return std::any_of(text.begin(), text.end(), [](char c)
-                       { return (unsigned char) c < 0x20 || c == 0x7f; });
-}
-
-// macOS gives arrows and function keys private-use code points, U+F700 to U+F8FF.
-bool isFunctionKeyCharacter(const std::string& text)
-{
-    if (text.size() < 3 || (unsigned char) text[0] != 0xEF)
-        return false;
-
-    auto second = (unsigned char) text[1];
-    return second >= 0x9C && second <= 0xA3;
-}
-
-bool isCommandOrControlHeld(const Graphics::ModifierKeys& modifiers)
-{
-    return modifiers.command || modifiers.control;
-}
-
-// What a key press types, if anything: no chords, no control characters and
-// no function keys.
-std::optional<std::string> getTypedText(const Graphics::KeyEvent& event)
-{
-    auto& text = event.characters;
-
-    if (isCommandOrControlHeld(event.modifiers) || text.empty())
-        return std::nullopt;
-
-    if (hasControlCharacter(text) || isFunctionKeyCharacter(text))
-        return std::nullopt;
-
-    return text;
-}
-
 struct SpecialKeyBinding
 {
     std::uint16_t keyCode;
@@ -310,7 +274,11 @@ searchkeys::Key makeSearchKey(const Graphics::KeyEvent& event)
 {
     auto key = searchkeys::Key {};
     key.special = getSpecialKey(event.keyCode);
-    key.characters = getTypedText(event).value_or("");
+    key.characters = grazer::getSearchKeyCharacters({.characters = event.characters,
+                                                     .charactersIgnoringModifiers =
+                                                         event.charactersIgnoringModifiers,
+                                                     .command = event.modifiers.command,
+                                                     .control = event.modifiers.control});
     key.command = event.modifiers.command;
     key.control = event.modifiers.control;
     key.alt = event.modifiers.alt;

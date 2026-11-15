@@ -127,3 +127,22 @@ auto tJMovesHighlight = test("PaletteKeys/j in normal mode moves the highlight d
 {
     check(getOutcomeOfKeys("git", {escapeKey, makeTypedKey("j")}) == PaletteKeyAction::moveDown);
 };
+
+auto tControlWDeletesWord = test("PaletteKeys/ctrl+w in insert mode deletes the word behind the caret") = []
+{
+    auto controlW = searchkeys::Key {};
+    controlW.characters = getSearchKeyCharacters(
+        {.characters = "\x17", .charactersIgnoringModifiers = "w", .control = true});
+    controlW.control = true;
+
+    auto box = searchkeys::SearchBox {};
+    box.setTextAndCaret("hello world", 11);
+    check(box.handleKey(controlW) == searchkeys::Action::none);
+    check(box.getText() == "hello ");
+};
+
+auto tCommandChordTypesNothing = test("PaletteKeys/a command chord types nothing into the search box") = []
+{
+    check(getSearchKeyCharacters({.characters = "c", .charactersIgnoringModifiers = "c", .command = true})
+              .empty());
+};
