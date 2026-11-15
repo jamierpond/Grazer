@@ -1,5 +1,7 @@
 #include "PaletteView.h"
 
+#include <SessionLog/EventLine.h>
+
 #include <algorithm>
 #include <map>
 #include <optional>
@@ -801,7 +803,10 @@ bool PaletteView::handleSearchKey(const Graphics::KeyEvent& event)
 
     if (auto action = grazer::getPaletteKeyAction(result.action))
     {
-        LOG("palette ", getModeName(result.state), " mode: ", grazer::getPaletteKeyActionName(*action));
+        LOG(sessionlog::formatEventLine(
+            "palette.key",
+            {{"mode", getModeName(result.state)},
+             {"action", grazer::getPaletteKeyActionName(*action)}}));
         runPaletteKeyAction(*action);
     }
 
@@ -813,7 +818,7 @@ void PaletteView::applySearchState(const searchkeys::State& state)
     auto& panel = backdrop.panel;
 
     if (searchkeys::isNormalMode(state) != searchkeys::isNormalMode(searchKeysState))
-        LOG("palette enters ", getModeName(state), " mode");
+        LOG(sessionlog::formatEventLine("palette.mode", {{"mode", getModeName(state)}}));
 
     // A text change re-filters exactly as typing does.
     if (state.text != panel.query.getText())

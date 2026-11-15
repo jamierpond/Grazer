@@ -14,7 +14,6 @@
 #include "Places.h"
 #include "ReloadFromOrigin.h"
 #include "Session.h"
-#include "SessionLog.h"
 #include "Settings.h"
 #include "Sites.h"
 #include "TabExpiry.h"
@@ -32,6 +31,8 @@
 #include <emberstore/AppDatabase.h>
 
 #include <RudderClient.h>
+#include <SessionLog/EventLine.h>
+#include <SessionLog/SessionLog.h>
 
 #include <algorithm>
 #include <charconv>
@@ -54,12 +55,16 @@ static bool snapshotMode = false;
 static constexpr auto sessionLogsToKeep = std::size_t {50};
 
 // A palette row as the session log names it.
-static std::string describePaletteRow(const GoItem& item)
+static void logEvent(std::string_view event,
+                     std::initializer_list<sessionlog::Field> fields = {})
 {
-    if (item.tabId >= 0)
-        return "tab " + std::to_string(item.tabId) + " " + item.url;
+    LOG(sessionlog::formatEventLine(event, fields));
+}
 
-    return std::string {item.kind} + " \"" + item.title + "\" " + item.url;
+static void logPaletteRowEvent(std::string_view event, const GoItem& item)
+{
+    logEvent(event,
+             {{"kind", item.kind}, {"tab", item.tabId}, {"title", item.title}, {"url", item.url}});
 }
 
 // The page script posts "openPalette:<key>" for the vimium keys o and t.
@@ -344,7 +349,7 @@ struct BrowserView final : View
         tab.url = url;
         tab.openedUrl = url;
         loadInto(tab, url);
-        LOG("tab ", tab.id, " open ", url);
+        logEvent("tab.open", {{"tab", tab.id}, {"url", url}});
         return tab;
     }
 
@@ -392,7 +397,7 @@ struct BrowserView final : View
     void adoptPopup(EA::OwningPointer<WebView> popup)
     {
         auto& tab = tabs.createNew(nextTabId++, std::move(popup));
-        LOG("tab ", tab.id, " open as a popup from the page");
+        logEvent("tab.open", {{"tab", tab.id}, {"from", "popup"}});
         wireTab(tab);
         switchTo(tab);
         syncPalette();
@@ -429,7 +434,7 @@ struct BrowserView final : View
             view,
             [this, t](const std::string& message)
             {
-                LOG("tab ", t->id, " download: ", message);
+                logEvent("tab.download", {{"tab", t->id}, {"message", message}});
                 showToast(activeTab != nullptr ? *activeTab : *t, message);
             });
 
@@ -441,7 +446,7 @@ struct BrowserView final : View
     // clobbering the tab's real URL or polluting history.
     void handleNavigationStarted(Tab& tab, const std::string& url)
     {
-        LOG("tab ", tab.id, " navigation start ", url);
+        logEvent("tab.navigate.start", {{"tab", tab.id}, {"url", url}});
 
         if (url.starts_with("http"))
             recordPageVisit(tab, url);
@@ -469,7 +474,7 @@ struct BrowserView final : View
     // own, so without this the tab keeps the URL it was sent to.
     void handleNavigationFinished(Tab& tab, const std::string& url)
     {
-        LOG("tab ", tab.id, " navigation finish ", url);
+        logEvent("tab.navigate.finish", {{"tab", tab.id}, {"url", url}});
         tab.hasFinishedFirstLoad = true;
         updateLoadingBackdrop();
 
@@ -489,11 +494,11 @@ struct BrowserView final : View
     {
         if (isCancelledNavigation(error))
         {
-            LOG("tab ", tab.id, " navigation cancelled ", tab.url);
+            logEvent("tab.navigate.cancel", {{"tab", tab.id}, {"url", tab.url}});
             return;
         }
 
-        LOG("tab ", tab.id, " navigation fail ", tab.url, ": ", error);
+        logEvent("tab.navigate.fail", {{"tab", tab.id}, {"url", tab.url}, {"error", error}});
         tab.failed = true;
         history.forget(tab.url);
         tab.view().loadHTML(errorPageHTML(tab.url, error));
@@ -544,7 +549,7 @@ struct BrowserView final : View
             activeTab->view().removeFromParent();
 
         activeTab = &tab;
-        LOG("tab ", tab.id, " switch to ", tab.url);
+        logEvent("tab.switch", {{"tab", tab.id}, {"url", tab.url}});
         tab.lastActivatedSequence = ++activationSequence;
         tab.activatedAtMs =
             recordTabActivation(std::move(tab.activatedAtMs), MruStore::nowMs());
@@ -628,7 +633,7 @@ struct BrowserView final : View
         if (index < 0)
             return;
 
-        LOG("tab ", tab->id, " close (", reason, ") ", tab->url);
+        logEvent("tab.close", {{"tab", tab->id}, {"reason", reason}, {"url", tab->url}});
 
         auto wasActive = tab == activeTab;
 
@@ -660,7 +665,7 @@ struct BrowserView final : View
     // Starred places have no ✕; their ★ unstars them.
     void clearItem(const GoItem& item)
     {
-        LOG("palette x on ", describePaletteRow(item));
+        logPaletteRowEvent("palette.close-row", item);
 
         if (!item.canClose)
             return;
@@ -671,7 +676,7 @@ struct BrowserView final : View
             return;
         }
 
-        LOG("palette x forgets history ", item.url);
+        logEvent("palette.forget-history", {{"url", item.url}});
         history.forget(item.url);
         syncPalette();
     }
@@ -679,7 +684,7 @@ struct BrowserView final : View
     // The palette's ctrl-w: close an open tab's row and keep the palette open.
     void closeTabRow(const GoItem& item)
     {
-        LOG("palette ctrl-w on ", describePaletteRow(item));
+        logPaletteRowEvent("palette.ctrl-w", item);
 
         if (canCloseWithCtrlW(item))
             closeTabById(item.tabId);
@@ -759,12 +764,10 @@ struct BrowserView final : View
         paletteSelected = findDefaultSelection(paletteFiltered);
         syncPalette();
 
-        LOG("palette open via ",
-            openedBy,
-            paletteMode == PaletteMode::newTab ? " (new tab)" : " (go from here)",
-            ", input \"",
-            paletteQuery,
-            "\"");
+        logEvent("palette.open",
+                 {{"via", openedBy},
+                  {"new-tab", paletteMode == PaletteMode::newTab},
+                  {"query", paletteQuery}});
 
         addSubview(palette);
         palette.setBounds(getLocalBounds());
@@ -793,7 +796,7 @@ struct BrowserView final : View
         paletteQuery = text;
         refilterPalette();
         paletteSelected = findDefaultSelection(paletteFiltered);
-        LOG("palette query \"", text, "\" lists ", paletteFiltered.size(), " rows");
+        logEvent("palette.query", {{"text", text}, {"rows", paletteFiltered.size()}});
         publishResults();
         previewDirty = true;
     }
@@ -816,7 +819,7 @@ struct BrowserView final : View
             return {};
 
         auto text = completionText(*row, paletteQuery);
-        LOG("palette Tab completes the input to \"", text, "\"");
+        logEvent("palette.complete", {{"text", text}});
         setPaletteQuery(text);
         return text;
     }
@@ -828,10 +831,7 @@ struct BrowserView final : View
 
         auto start = std::max(paletteSelected, delta > 0 ? -1 : 0);
         paletteSelected = std::clamp(start + delta, 0, (int) paletteFiltered.size() - 1);
-        LOG("palette highlight row ",
-            paletteSelected,
-            ": ",
-            describePaletteRow(paletteFiltered[(size_t) paletteSelected]));
+        logPaletteRowEvent("palette.highlight", paletteFiltered[(size_t) paletteSelected]);
         publishResults();
         previewDirty = false;
         previewSelected();
@@ -880,11 +880,11 @@ struct BrowserView final : View
 
         if (!row)
         {
-            LOG("palette Enter did nothing: no row highlighted");
+            logEvent("palette.enter-without-row");
             return;
         }
 
-        LOG("palette Enter on ", describePaletteRow(*row), inNewTab ? " (cmd)" : "");
+        logPaletteRowEvent(inNewTab ? "palette.pick.cmd-enter" : "palette.pick.enter", *row);
         openItem(*row, inNewTab);
     }
 
@@ -893,7 +893,7 @@ struct BrowserView final : View
         if (!paletteOpen)
             return;
 
-        LOG("palette click on ", describePaletteRow(item), inNewTab ? " (cmd)" : "");
+        logPaletteRowEvent(inNewTab ? "palette.pick.cmd-click" : "palette.pick.click", item);
         openItem(item, inNewTab);
     }
 
@@ -905,7 +905,7 @@ struct BrowserView final : View
 
         if (opening == PaletteOpening::switchToTab)
         {
-            LOG("palette opens: switch to tab ", item.tabId);
+            logEvent("palette.result", {{"action", "switch-tab"}, {"tab", item.tabId}});
 
             if (auto* tab = findTab(item.tabId))
                 switchTo(*tab);
@@ -928,18 +928,18 @@ struct BrowserView final : View
 
         if (opening == PaletteOpening::loadInThisTab || isHomeURL(startingTab->url))
         {
-            LOG("palette opens: load in tab ", startingTab->id, " ", item.url);
+            logEvent("palette.result", {{"action", "load-here"}, {"tab", startingTab->id}, {"url", item.url}});
             navigateTabTo(*startingTab, item.url);
             return;
         }
 
-        LOG("palette opens: new tab ", item.url);
+        logEvent("palette.result", {{"action", "new-tab"}, {"url", item.url}});
         openTab(item.url);
     }
 
     void cancelPalette()
     {
-        LOG("palette Esc");
+        logEvent("palette.cancel", {{"via", "esc"}});
 
         if (originTab != nullptr && originTab != activeTab)
             switchTo(*originTab);
@@ -949,7 +949,7 @@ struct BrowserView final : View
 
     void toggleBookmark(const std::string& title, const std::string& url)
     {
-        LOG("star toggled on ", url);
+        logEvent("star.toggle", {{"url", url}});
         places.toggle(title, url);
         syncPalette();
     }
@@ -1082,7 +1082,7 @@ struct BrowserView final : View
         if (isHomeURL(activeTab->url))
             return;
 
-        LOG("tab ", activeTab->id, " reload", bypassCache ? " from origin " : " ", activeTab->url);
+        logEvent("tab.reload", {{"tab", activeTab->id}, {"from-origin", bypassCache}, {"url", activeTab->url}});
 
         if (activeTab->failed)
             view.loadURL(activeTab->url);
@@ -1287,9 +1287,9 @@ struct BrowserWindow
 void Browser::startSessionLog()
 {
     auto logsDirectory = (std::filesystem::path {durable.directory().str()} / "logs").string();
-    setLogFile(getSessionLogPath(logsDirectory, MruStore::nowMs()));
-    deleteOldSessionLogs(logsDirectory, sessionLogsToKeep);
-    LOG("launch", snapshotMode ? " for a snapshot" : "");
+    setLogFile(sessionlog::getSessionLogPath(logsDirectory, MruStore::nowMs()));
+    sessionlog::deleteOldSessionLogs(logsDirectory, sessionLogsToKeep);
+    logEvent("app.launch", {{"snapshot", snapshotMode}});
 }
 
 void Browser::start()
@@ -1323,20 +1323,20 @@ void Browser::offerToBecomeDefaultBrowser()
 
     if (settings.hasDeclinedDefaultBrowserOffer())
     {
-        LOG("default browser: not offered, declined before");
+        logEvent("default-browser.skip", {{"reason", "declined-before"}});
         return;
     }
 
-    LOG("default browser: offered");
+    logEvent("default-browser.offer");
 
     if (DefaultBrowser::hasUserAcceptedDefaultBrowserOffer())
     {
-        LOG("default browser: accepted, asking the system");
+        logEvent("default-browser.accept");
         DefaultBrowser::askToBecomeDefaultBrowser();
     }
     else
     {
-        LOG("default browser: declined");
+        logEvent("default-browser.decline");
         settings.recordDeclinedDefaultBrowserOffer();
     }
 #endif
@@ -1344,7 +1344,7 @@ void Browser::offerToBecomeDefaultBrowser()
 
 BrowserWindow& Browser::openWindow(const WindowSession& state)
 {
-    LOG("window open with ", state.urls.size(), " saved tabs");
+    logEvent("window.open", {{"saved-tabs", state.urls.size()}});
     auto& window = windows.createNew(*this, state);
     activeWindow = &window;
     saveSession();
@@ -1363,12 +1363,12 @@ void Browser::closeWindow(BrowserWindow& window)
     // The last window's tabs stay in the session for the next launch.
     if (open <= 1)
     {
-        LOG("window close: the last one, so quit");
+        logEvent("window.close", {{"last", true}});
         Apps::quit();
         return;
     }
 
-    LOG("window close");
+    logEvent("window.close", {{"last", false}});
     window.closed = true;
 
     if (activeWindow == &window)
@@ -1452,7 +1452,7 @@ void Browser::setupRudder()
     rudder.emplace(rudder::protocol::Hello {"Grazer", "audio.pond.grazer", 0});
     rudder->onActivate = [this](const std::string& contextId)
     {
-        LOG("Rudder picks tab ", contextId);
+        logEvent("rudder.pick", {{"context", contextId}});
         if (auto id = rudderTabId(contextId))
             focusTabById(*id);
     };
@@ -1571,7 +1571,7 @@ Control::Ack Browser::focusTabById(std::int64_t id)
 
 Control::Ack Browser::openUrlFromControl(const std::string& text)
 {
-    LOG("open url from outside Grazer: ", text);
+    logEvent("url.open-external", {{"url", text}});
 
     if (text.empty())
         return {false, "no url given"};
@@ -1667,7 +1667,7 @@ struct GrazerApp
             .activePage = [this] { return getFrontWindowPage(); }};
     }
 
-    ~GrazerApp() { LOG("quit"); }
+    ~GrazerApp() { logEvent("app.quit"); }
 
     Browser browser;
 };

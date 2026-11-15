@@ -7,7 +7,6 @@ add_executable(GrazerTests
         PaletteTests.cpp
         PaletteSpeedTests.cpp
         PlacesTests.cpp
-        SessionLogTests.cpp
         SessionTests.cpp
         SettingsTests.cpp
         SitesTests.cpp

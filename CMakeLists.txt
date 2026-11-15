@@ -69,7 +69,6 @@ add_library(GrazerBrowser STATIC
         Lib/Browser/Palette.cpp
         Lib/Browser/PaletteKeys.cpp
         Lib/Browser/Places.cpp
-        Lib/Browser/SessionLog.cpp
         Lib/Browser/Session.cpp
         Lib/Browser/Settings.cpp
         Lib/Browser/Sites.cpp
@@ -78,7 +77,7 @@ add_library(GrazerBrowser STATIC
         Lib/Browser/Url.cpp)
 
 target_include_directories(GrazerBrowser PUBLIC Lib/Browser Source)
-target_link_libraries(GrazerBrowser PUBLIC emberstore FrecencySearch SearchKeys)
+target_link_libraries(GrazerBrowser PUBLIC emberstore FrecencySearch SearchKeys SessionLog)
 
 # eacp's bundle plist template plus http/https URL types, so Grazer can be
 # picked as the default browser and gets the URLs macOS opens with it.
