@@ -5,9 +5,31 @@
 
 namespace grazer
 {
+namespace
+{
+void dropTabsWithEmptyURLs(WindowSession& window)
+{
+    window.activations.resize(window.urls.size());
+
+    auto kept = WindowSession {};
+
+    for (std::size_t i = 0; i < window.urls.size(); ++i)
+    {
+        if (!window.urls[i].empty())
+        {
+            kept.urls.push_back(std::move(window.urls[i]));
+            kept.activations.push_back(std::move(window.activations[i]));
+        }
+    }
+
+    window.urls = std::move(kept.urls);
+    window.activations = std::move(kept.activations);
+}
+} // namespace
+
 WindowSession sanitizeWindow(WindowSession window)
 {
-    std::erase_if(window.urls, [](const std::string& url) { return url.empty(); });
+    dropTabsWithEmptyURLs(window);
 
     auto last = std::max((std::int64_t) window.urls.size() - 1, (std::int64_t) 0);
     window.active = std::clamp(window.active, (std::int64_t) 0, last);

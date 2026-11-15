@@ -9,24 +9,35 @@
 
 namespace grazer
 {
-// One window's tabs + active index.
+// When one tab was brought to the front, oldest first.
+struct TabActivations
+{
+    std::vector<std::int64_t> atMs;
+
+    MIRO_REFLECT(atMs)
+};
+
+// One window's tabs + active index. activations[i] belongs to urls[i].
 struct WindowSession
 {
     std::vector<std::string> urls;
     std::int64_t active = 0;
+    std::vector<TabActivations> activations;
 
-    MIRO_REFLECT(urls, active)
+    MIRO_REFLECT(urls, active, activations)
 };
 
 // Every open window, in the order they were opened.
 struct SessionState
 {
     std::vector<WindowSession> windows;
+    std::int64_t savedAtMs = 0;
 
-    MIRO_REFLECT(windows)
+    MIRO_REFLECT(windows, savedAtMs)
 };
 
-// Drops empty URLs and clamps `active` into range, so a hand-edited or
+// Drops empty URLs (with their activations), lines activations up with
+// urls, and clamps `active` into range, so a hand-edited or
 // corrupt session file can't restore into a broken state.
 WindowSession sanitizeWindow(WindowSession window);
 

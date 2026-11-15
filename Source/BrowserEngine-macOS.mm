@@ -247,6 +247,17 @@ void allowPictureInPicture(eacp::Graphics::WebView& view)
     }
 }
 
+// _isPlayingAudio is WebKit SPI (what Safari's tab speaker icon reads).
+bool isPlayingAudio(eacp::Graphics::WebView& view)
+{
+    auto* webView = findWebKitView(view);
+
+    if (webView == nil || ![webView respondsToSelector:@selector(_isPlayingAudio)])
+        return false;
+
+    return [[webView valueForKey:@"_isPlayingAudio"] boolValue];
+}
+
 void saveAttachmentsAsDownloads(eacp::Graphics::WebView& view)
 {
     if (auto* webView = findWebKitView(view))

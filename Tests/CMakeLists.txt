@@ -9,6 +9,7 @@ add_executable(GrazerTests
         SessionTests.cpp
         SettingsTests.cpp
         SitesTests.cpp
+        TabExpiryTests.cpp
         TabMatchTests.cpp
         UrlTests.cpp)
 

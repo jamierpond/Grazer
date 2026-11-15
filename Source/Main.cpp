@@ -15,6 +15,7 @@
 #include "Session.h"
 #include "Settings.h"
 #include "Sites.h"
+#include "TabExpiry.h"
 #include "TabMatch.h"
 #include "Types.h"
 #include "Url.h"
@@ -74,6 +75,7 @@ struct Tab
     bool failed = false;
     bool hasFinishedFirstLoad = false;
     std::int64_t lastActivatedSequence = 0;
+    std::vector<std::int64_t> activatedAtMs;
 };
 
 struct BrowserWindow;
@@ -244,11 +246,31 @@ struct BrowserView final : View
             return;
         }
 
-        for (auto& url: state.urls)
-            createTab(url);
+        for (std::size_t i = 0; i < state.urls.size(); ++i)
+            restoreTab(state.urls[i], getSavedActivations(state, i));
 
         switchTo(*tabs[(int) state.active]);
-        syncPalette();
+        closeIdleTabs();
+    }
+
+    static std::vector<std::int64_t> getSavedActivations(const WindowSession& state,
+                                                         std::size_t index)
+    {
+        if (index < state.activations.size())
+            return state.activations[index].atMs;
+
+        return {};
+    }
+
+    // A tab with no saved activations (a session from before they were kept)
+    // counts as used now, so it isn't closed the moment Grazer launches.
+    void restoreTab(const std::string& url, std::vector<std::int64_t> activatedAtMs)
+    {
+        auto& tab = createTab(url);
+        tab.activatedAtMs = std::move(activatedAtMs);
+
+        if (tab.activatedAtMs.empty())
+            tab.activatedAtMs.push_back(MruStore::nowMs());
     }
 
     WindowSession windowSession()
@@ -256,7 +278,10 @@ struct BrowserView final : View
         auto state = WindowSession {};
 
         for (auto& tab: tabs)
+        {
             state.urls.push_back(tab->url);
+            state.activations.push_back({tab->activatedAtMs});
+        }
 
         state.active = std::max(tabs.getIndexOfItem(activeTab), 0);
         return state;
@@ -465,6 +490,8 @@ struct BrowserView final : View
 
         activeTab = &tab;
         tab.lastActivatedSequence = ++activationSequence;
+        tab.activatedAtMs =
+            recordTabActivation(std::move(tab.activatedAtMs), MruStore::nowMs());
         content.addSubview(tab.view());
         tab.view().setBounds(content.getLocalBounds());
         updateLoadingBackdrop();
@@ -488,6 +515,36 @@ struct BrowserView final : View
     }
 
     void closeActiveTab() { closeTab(activeTab); }
+
+    bool mustTabStayOpen(Tab& tab)
+    {
+        return &tab == activeTab || &tab == originTab || isHomeURL(tab.url)
+               || BrowserEngine::isPlayingAudio(tab.view());
+    }
+
+    // Closes tabs left unused longer than the user's usual time to come back
+    // to one (see TabExpiry.h). They stay in history. Runs at launch and on
+    // idleTabTimer; the save also keeps savedAtMs current.
+    void closeIdleTabs()
+    {
+        if (!paletteOpen)
+        {
+            auto uses = std::vector<TabUse> {};
+
+            for (auto& tab: tabs)
+                uses.push_back({tab->activatedAtMs, mustTabStayOpen(*tab)});
+
+            auto idleTabs = std::vector<Tab*> {};
+
+            for (auto index: findIdleTabsToClose(uses, MruStore::nowMs()))
+                idleTabs.push_back(tabs[(int) index]);
+
+            for (auto* tab: idleTabs)
+                closeTab(tab);
+        }
+
+        syncPalette();
+    }
 
     void closeAllTabsExceptHome()
     {
@@ -1006,6 +1063,9 @@ struct BrowserView final : View
     WebView paletteWeb {paletteOptions()};
     WebViewBridge transport {paletteWeb};
     Threads::Timer previewTimer {[this] { handlePreviewTick(); }, 8};
+
+    static constexpr auto idleTabCheckInterval = Time::MS {5 * 60 * 1000};
+    Threads::Timer idleTabTimer {[this] { closeIdleTabs(); }, idleTabCheckInterval};
 };
 
 // One browser window: its tabs, palette and chrome, in a Window. Closing it
@@ -1086,7 +1146,7 @@ void Browser::start()
     setupControl();
     setupRudder();
 
-    auto state = session.load();
+    auto state = skipTimeGrazerWasClosed(session.load(), MruStore::nowMs());
     restoring = true;
 
     if (state.windows.empty())
@@ -1175,6 +1235,7 @@ void Browser::saveSession()
         return;
 
     auto state = SessionState {};
+    state.savedAtMs = MruStore::nowMs();
 
     for (auto& window: windows)
         if (!window->closed)

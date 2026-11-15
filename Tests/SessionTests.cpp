@@ -79,3 +79,27 @@ auto tSanitizeDropsEmptyWindows = test("Session/sanitize drops windows with no t
     check(state.windows[0].urls[0] == "https://a.com");
     check(state.windows[0].active == 0);
 };
+
+auto tActivationsRoundTrip =
+    test("Session/tab activations and the save time round-trip, lined up with urls") = []
+{
+    auto db = testing::freshDatabase("session-activations");
+    auto store = SessionStore {db};
+
+    auto window = WindowSession {{"", "https://a.com"}, 0, {{{1}}, {{2, 3}}}};
+    store.save({{window}, 42});
+
+    auto restored = store.load();
+    check(restored.savedAtMs == 42);
+    check(restored.windows[0].activations.size() == 1);
+    check(restored.windows[0].activations[0].atMs == std::vector<std::int64_t> {2, 3});
+};
+
+auto tMissingActivationsArePadded =
+    test("Session/a session from before activations loads with empty ones") = []
+{
+    auto window = sanitizeWindow({{"https://a.com", "https://b.com"}, 0});
+
+    check(window.activations.size() == 2);
+    check(window.activations[1].atMs.empty());
+};

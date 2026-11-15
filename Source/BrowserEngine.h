@@ -36,4 +36,7 @@ void allowPictureInPicture(eacp::Graphics::WebView& view);
 // keychain item (an ad-hoc signed app gets a keychain prompt for it).
 void supplyWebCryptoMasterKeyFrom(const std::string& directory);
 
+// Whether the page is playing sound right now. Always false on Windows.
+bool isPlayingAudio(eacp::Graphics::WebView& view);
+
 } // namespace BrowserEngine
