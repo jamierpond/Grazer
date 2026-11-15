@@ -1,9 +1,12 @@
 #include <Palette.h>
 
+#include <FrecencySearch/MatchLevel.h>
+
 #include <NanoTest/NanoTest.h>
 
 #include <algorithm>
 #include <chrono>
+#include <limits>
 #include <string>
 #include <unordered_map>
 
@@ -17,11 +20,44 @@ using Clock = std::chrono::steady_clock;
 // The history store's cap: a full history is what the palette searches on every key.
 constexpr auto historyEntryCount = 2000;
 
-// Each keystroke ranks the whole history; the rest of the 8 ms frame is drawing.
-// Generous so Debug builds and CI runners pass; it catches going back to O(n) disk reads.
-constexpr auto rankingBudgetMs = 25.0;
+// Ranking may cost this many times a plain pass that lower-cases every entry's
+// title and URL, timed in the same run: a slow CI runner slows both alike.
+// Measured locally at about 13 in Debug (what `just test` and CI build), 3.5 in
+// Release; room for a noisy runner, while a 10x slowdown still fails.
+constexpr auto rankingBudgetInBaselinePasses = 40.0;
 
-constexpr auto attemptsPerQuery = 3;
+constexpr auto attemptsPerMeasurement = 5;
+
+template <typename Work>
+double measureFastestMs(Work&& work)
+{
+    auto fastestMs = std::numeric_limits<double>::max();
+
+    for (auto attempt = 0; attempt < attemptsPerMeasurement; ++attempt)
+    {
+        auto start = Clock::now();
+        work();
+        auto elapsed = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+        fastestMs = std::min(fastestMs, elapsed);
+    }
+
+    return fastestMs;
+}
+
+double measureBaselinePassMs(const std::vector<HistoryEntry>& history)
+{
+    return measureFastestMs(
+        [&]
+        {
+            auto totalLength = std::size_t {0};
+
+            for (auto& entry: history)
+                totalLength += frecencysearch::normaliseQuery(entry.title).size()
+                               + frecencysearch::normaliseQuery(entry.url).size();
+
+            check(totalLength > 0);
+        });
+}
 
 std::string makeHistoryURL(int index)
 {
@@ -39,7 +75,7 @@ std::vector<HistoryEntry> makeFullHistory()
     return history;
 }
 
-double measureFastestRankingMs(const std::vector<HistoryEntry>& history, const std::string& query)
+double measureRankingMs(const std::vector<HistoryEntry>& history, const std::string& query)
 {
     auto usages = std::unordered_map<std::string, double> {};
     auto lookUpUsage = [&usages](const std::string& url)
@@ -48,17 +84,7 @@ double measureFastestRankingMs(const std::vector<HistoryEntry>& history, const s
         return found != usages.end() ? found->second : 0.0;
     };
 
-    auto fastestMs = rankingBudgetMs * 1000.0;
-
-    for (auto attempt = 0; attempt < attemptsPerQuery; ++attempt)
-    {
-        auto start = Clock::now();
-        rankPalette({}, history, {query, PaletteMode::goFromHere, lookUpUsage});
-        auto elapsed = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
-        fastestMs = std::min(fastestMs, elapsed);
-    }
-
-    return fastestMs;
+    return measureFastestMs([&] { rankPalette({}, history, {query, PaletteMode::goFromHere, lookUpUsage}); });
 }
 } // namespace
 
@@ -66,6 +92,11 @@ auto tRankingFullHistoryFitsBudget = test("PaletteSpeed/ranking a full history f
 {
     auto history = makeFullHistory();
 
+    auto baselineMs = measureBaselinePassMs(history);
+
     for (auto query: {"e", "ex", "exa", "page", "news"})
-        check(measureFastestRankingMs(history, query) < rankingBudgetMs);
+    {
+        auto rankingInBaselinePasses = measureRankingMs(history, query) / baselineMs;
+        check(rankingInBaselinePasses < rankingBudgetInBaselinePasses);
+    }
 };
