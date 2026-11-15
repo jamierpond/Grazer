@@ -260,12 +260,12 @@ void PaletteRows::scrollToHighlightedRow()
     if (highlighted >= 0)
     {
         auto top = (float) highlighted * rowHeight;
-        auto visible = std::max(getHeight() - 2.f * listPadding, rowHeight);
+        auto visibleHeight = std::max(getHeight() - 2.f * listPadding, rowHeight);
 
         if (top < scroll)
             scroll = top;
-        else if (top + rowHeight > scroll + visible)
-            scroll = top + rowHeight - visible;
+        else if (top + rowHeight > scroll + visibleHeight)
+            scroll = top + rowHeight - visibleHeight;
     }
 
     scroll = std::clamp(scroll, 0.f, getMaximumScroll());
@@ -512,7 +512,7 @@ PaletteView::PaletteView()
     setRootComponent(backdrop);
 
     auto& panel = backdrop.panel;
-    panel.query.onTextChange = [this](const std::string& text) { onSetQuery(text); };
+    panel.query.onTextChange = [this](const std::string& typedText) { onSetQuery(typedText); };
     panel.rows.onChoose = [this](const GoItem& row, bool inNewTab) { onChoose(row, inNewTab); };
     panel.rows.onToggleStar = [this](const GoItem& row) { onToggleBookmark(row); };
     panel.rows.onClose = [this](const GoItem& row) { onCloseItem(row); };
@@ -560,12 +560,12 @@ bool PaletteView::isCaretAtEnd() const
 // Tab / →: the highlighted row's URL goes into the input, caret at its end.
 void PaletteView::completeHighlightedRow()
 {
-    auto text = onComplete();
+    auto completedText = onComplete();
 
-    if (text.empty())
+    if (completedText.empty())
         return;
 
-    backdrop.panel.query.setText(text);
+    backdrop.panel.query.setText(completedText);
 }
 
 // The palette's own keys, before the query field sees them.

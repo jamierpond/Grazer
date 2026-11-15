@@ -34,6 +34,7 @@
 #include <RudderClient.h>
 
 #include <algorithm>
+#include <charconv>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -2048,6 +2049,20 @@ struct ControlClientApp
 
 namespace
 {
+// "<width>x<height>", e.g. 1280x800. Leaves the request alone if it doesn't parse.
+void parseSnapshotSize(const std::string& size, SnapshotRequest& request)
+{
+    auto separator = size.find('x');
+
+    if (separator == std::string::npos)
+        return;
+
+    auto* begin = size.data();
+    auto* end = begin + size.size();
+    std::from_chars(begin, begin + separator, request.width);
+    std::from_chars(begin + separator + 1, end, request.height);
+}
+
 SnapshotRequest parseSnapshotRequest(int argc, char* argv[])
 {
     auto request = SnapshotRequest {};
@@ -2058,7 +2073,7 @@ SnapshotRequest parseSnapshotRequest(int argc, char* argv[])
         if (std::string {argv[i]} == "--palette")
             request.palette = true;
         else if (std::string {argv[i]} == "--size" && i + 1 < argc)
-            std::sscanf(argv[++i], "%dx%d", &request.width, &request.height);
+            parseSnapshotSize(argv[++i], request);
         else if (std::string {argv[i]} == "--js" && i + 1 < argc)
             request.script = argv[++i];
         else
