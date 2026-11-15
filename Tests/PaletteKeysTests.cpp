@@ -52,6 +52,11 @@ auto tEscapeInInsertStaysOpen = test("PaletteKeys/escape in insert mode keeps th
     check(!getOutcomeOfKeys("git", {escapeKey}).has_value());
 };
 
+auto tEscapeWithNoTextCancels = test("PaletteKeys/escape with no text cancels the palette") = []
+{
+    check(getOutcomeOfKeys("", {escapeKey}) == PaletteKeyAction::cancel);
+};
+
 auto tEscapeInNormalCancels = test("PaletteKeys/escape in normal mode cancels the palette") = []
 {
     check(getOutcomeOfKeys("git", {escapeKey, escapeKey}) == PaletteKeyAction::cancel);
