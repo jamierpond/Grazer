@@ -89,3 +89,41 @@ auto tCommandEnterOpensInNewTab = test("PaletteKeys/command enter in normal mode
     commandEnter.command = true;
     check(getOutcomeOfKeys("git", {escapeKey, commandEnter}) == PaletteKeyAction::activateInNewTab);
 };
+
+namespace
+{
+searchkeys::SearchBox makeBoxInNormalMode(const std::string& text)
+{
+    auto box = searchkeys::SearchBox {};
+    box.setTextAndCaret(text, (int) text.size());
+    box.handleKey(escapeKey);
+    return box;
+}
+} // namespace
+
+auto tEscapePutsCursorOnLastCharacter = test("PaletteKeys/escape puts the block cursor on the last character") = []
+{
+    auto text = std::string {"hello world"};
+    auto lastCharacter = (int) text.size() - 1;
+    check(makeBoxInNormalMode(text).getCaret() == lastCharacter);
+};
+
+auto tBackWordMovesToWordStart = test("PaletteKeys/b from the end of hello world lands on world") = []
+{
+    auto box = makeBoxInNormalMode("hello world");
+    box.handleKey(makeTypedKey("b"));
+    auto startOfWorld = 6;
+    check(box.getCaret() == startOfWorld);
+};
+
+auto tXDeletesCharacter = test("PaletteKeys/x in normal mode deletes the character under the cursor") = []
+{
+    auto box = makeBoxInNormalMode("git");
+    box.handleKey(makeTypedKey("x"));
+    check(box.getText() == "gi");
+};
+
+auto tJMovesHighlight = test("PaletteKeys/j in normal mode moves the highlight down") = []
+{
+    check(getOutcomeOfKeys("git", {escapeKey, makeTypedKey("j")}) == PaletteKeyAction::moveDown);
+};
