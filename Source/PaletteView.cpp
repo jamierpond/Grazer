@@ -190,11 +190,6 @@ bool canCloseRow(const GoItem& row)
     return row.canClose;
 }
 
-bool isOpenTabRow(const GoItem& row)
-{
-    return row.kind == GoKind::tab;
-}
-
 struct KeyBinding
 {
     std::uint16_t keyCode;
@@ -216,7 +211,7 @@ const auto controlKeyActions = std::vector<KeyBinding> {
     {Graphics::KeyCode::P, PaletteKeyAction::moveUp},
     {Graphics::KeyCode::S, PaletteKeyAction::toggleStar},
     {Graphics::KeyCode::X, PaletteKeyAction::closeRow},
-    {Graphics::KeyCode::W, PaletteKeyAction::closeTabRow},
+    {Graphics::KeyCode::Q, PaletteKeyAction::closeRow},
 };
 
 // eacp's TextEditor draws its text this far in from its left edge
@@ -775,7 +770,6 @@ void PaletteView::runPaletteKeyAction(PaletteKeyAction action)
         {PaletteKeyAction::moveToLast, [this] { onMoveSelection(pastEveryRow); }},
         {PaletteKeyAction::toggleStar, [this] { runOnHighlightedRow(canStarRow, onToggleBookmark); }},
         {PaletteKeyAction::closeRow, [this] { runOnHighlightedRow(canCloseRow, onCloseItem); }},
-        {PaletteKeyAction::closeTabRow, [this] { runOnHighlightedRow(isOpenTabRow, onCloseTabRow); }},
         {PaletteKeyAction::complete, [this] { completeHighlightedRow(); }},
         {PaletteKeyAction::activate, [this] { onActivate(false); }},
         {PaletteKeyAction::activateInNewTab, [this] { onActivate(true); }},

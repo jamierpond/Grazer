@@ -16,7 +16,6 @@ enum class PaletteKeyAction
     moveToLast,
     toggleStar,
     closeRow,
-    closeTabRow,
     complete,
     activate,
     activateInNewTab,

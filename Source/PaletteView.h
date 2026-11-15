@@ -126,7 +126,6 @@ public:
     std::function<void(const GoItem&, bool inNewTab)> onChoose = [](auto&, bool) {};
     std::function<void()> onCancel = [] {};
     std::function<void(const GoItem&)> onCloseItem = [](auto&) {};
-    std::function<void(const GoItem&)> onCloseTabRow = [](auto&) {};
     std::function<void(const GoItem&)> onToggleBookmark = [](auto&) {};
 
 private:

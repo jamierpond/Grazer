@@ -39,7 +39,6 @@ constexpr auto paletteKeyActionNames = std::array {
     PaletteKeyActionName {PaletteKeyAction::moveToLast, "move to last"},
     PaletteKeyActionName {PaletteKeyAction::toggleStar, "toggle star"},
     PaletteKeyActionName {PaletteKeyAction::closeRow, "close row"},
-    PaletteKeyActionName {PaletteKeyAction::closeTabRow, "close tab row"},
     PaletteKeyActionName {PaletteKeyAction::complete, "complete"},
     PaletteKeyActionName {PaletteKeyAction::activate, "open"},
     PaletteKeyActionName {PaletteKeyAction::activateInNewTab, "open in new tab"},

@@ -65,9 +65,6 @@ int findDefaultSelection(const std::vector<GoItem>& rows);
 // got shorter than that; -1 stays -1.
 int keepSelectionInRange(int selected, std::size_t rowCount);
 
-// Whether ctrl-w closes this row: open tabs only.
-bool canCloseWithCtrlW(const GoItem& item);
-
 enum class PaletteOpening
 {
     switchToTab,

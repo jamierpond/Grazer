@@ -463,16 +463,6 @@ auto tOpenPageHidesItsFragmentHistory =
     check(ranked.front().kind == GoKind::tab);
 };
 
-auto tCtrlWClosesOnlyTabRows =
-    test("Palette/ctrl-w closes open tab rows only") = []
-{
-    auto rows = someRows();
-
-    check(canCloseWithCtrlW(rows[0]));
-    check(!canCloseWithCtrlW(rows[2]));
-    check(!canCloseWithCtrlW(rank({}, {}, "hello").front()));
-};
-
 auto tHighlightMovesToTheNextRow =
     test("Palette/closing the highlighted row highlights the next one") = []
 {

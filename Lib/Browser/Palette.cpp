@@ -333,11 +333,6 @@ int keepSelectionInRange(int selected, std::size_t rowCount)
     return std::min(selected, last);
 }
 
-bool canCloseWithCtrlW(const GoItem& item)
-{
-    return item.kind == GoKind::tab;
-}
-
 PaletteOpening decidePaletteOpening(const GoItem& item, PaletteMode mode, bool inNewTab)
 {
     if (item.tabId >= 0)

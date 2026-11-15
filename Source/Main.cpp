@@ -202,11 +202,6 @@ struct BrowserView final : View
             auto cleared = item;
             Threads::callAsync([this, cleared] { clearItem(cleared); });
         };
-        palette.onCloseTabRow = [this](const GoItem& item)
-        {
-            auto row = item;
-            Threads::callAsync([this, row] { closeTabRow(row); });
-        };
         palette.onToggleBookmark = [this](const GoItem& item)
         { toggleBookmark(item.title, item.url); };
 
@@ -661,7 +656,7 @@ struct BrowserView final : View
         syncPalette();
     }
 
-    // The palette's ✕ / ctrl-x: close an open tab or forget a history page.
+    // The palette's ✕ / ctrl-x / ctrl-q: close an open tab or forget a history page.
     // Starred places have no ✕; their ★ unstars them.
     void clearItem(const GoItem& item)
     {
@@ -679,15 +674,6 @@ struct BrowserView final : View
         logEvent("palette.forget-history", {{"url", item.url}});
         history.forget(item.url);
         syncPalette();
-    }
-
-    // The palette's ctrl-w: close an open tab's row and keep the palette open.
-    void closeTabRow(const GoItem& item)
-    {
-        logPaletteRowEvent("palette.ctrl-w", item);
-
-        if (canCloseWithCtrlW(item))
-            closeTabById(item.tabId);
     }
 
     std::vector<std::int64_t> getActivationStamps() const

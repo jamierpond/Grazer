@@ -30,7 +30,7 @@ struct GoItem
     // The tab the palette was opened over. Listed last, never Enter's default.
     bool isCurrent = false;
 
-    // Whether ✕ / ctrl-x and ★ / ctrl-s do anything on this row.
+    // Whether ✕ / ctrl-x / ctrl-q and ★ / ctrl-s do anything on this row.
     bool canClose = false;
     bool canStar = false;
 };
