@@ -86,6 +86,13 @@ set(EACP_MACOS_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/macOSBundleInfo.plist.in
 
 add_executable(Grazer Source/Main.cpp Source/LoadingBackdrop.cpp Source/PaletteView.cpp)
 
+# eacp's Text/Font.h ends an `if constexpr` chain with a return MSVC calls
+# unreachable (C4702); that warning ignores /external:W0, so it would fail
+# PaletteView.cpp under -Werror until eacp fixes the header.
+if (MSVC)
+    set_source_files_properties(Source/PaletteView.cpp PROPERTIES COMPILE_OPTIONS /wd4702)
+endif()
+
 set_target_properties(Grazer PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_BUNDLE_NAME "Grazer"
