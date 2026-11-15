@@ -45,7 +45,7 @@ void HistoryStore::recordVisit(const std::string& url,
     if (isLoopbackURL(url))
         return;
 
-    auto ref = entries.doc(normalizeURL(url));
+    auto ref = entries.doc(pageKey(url));
     auto entry = ref.get().value_or(HistoryEntry {});
 
     entry.url = url;
@@ -63,7 +63,7 @@ void HistoryStore::updateTitle(const std::string& url, const std::string& title)
     if (title.empty())
         return;
 
-    auto ref = entries.doc(normalizeURL(url));
+    auto ref = entries.doc(pageKey(url));
 
     if (auto entry = ref.get())
     {
@@ -74,7 +74,7 @@ void HistoryStore::updateTitle(const std::string& url, const std::string& title)
 
 void HistoryStore::forget(const std::string& url)
 {
-    entries.remove(normalizeURL(url));
+    entries.remove(pageKey(url));
 }
 
 std::vector<HistoryEntry> HistoryStore::all()

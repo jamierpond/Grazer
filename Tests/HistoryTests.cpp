@@ -106,3 +106,19 @@ auto tLoopbackPagesAreNotRecorded =
 
     check(history.all().size() == 1);
 };
+
+auto tFragmentsShareOneEntry =
+    test("History/the same page at different #fragments is one entry") = []
+{
+    auto db = testing::freshDatabase("history-fragments");
+    auto history = HistoryStore {db};
+
+    history.recordVisit("https://github.com/o/r/pull/1/files#diff-aaa", "PR", 1000);
+    history.recordVisit("https://github.com/o/r/pull/1/files#diff-bbb", "", 2000);
+    history.recordVisit("https://github.com/o/r/pull/1/files", "", 3000);
+
+    auto all = history.all();
+    check(all.size() == 1);
+    check(all[0].visits == 3);
+    check(all[0].title == "PR");
+};

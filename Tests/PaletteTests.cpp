@@ -350,3 +350,15 @@ auto tDuplicateHistoryListedOnce =
 
     check(ranked.size() == 2);
 };
+
+auto tOpenPageHidesItsFragmentHistory =
+    test("Palette/an open tab hides history rows for the same page at another #fragment") = []
+{
+    auto tabs = std::vector<GoItem> {{0, "PR", "https://github.com/o/r/pull/1/files"}};
+    auto history = std::vector<HistoryEntry> {
+        {"https://github.com/o/r/pull/1/files#diff-aaa", "PR", 1000, 1}};
+
+    auto ranked = rankPalette(tabs, history, "");
+
+    check(ranked.size() == 1);
+};

@@ -30,6 +30,16 @@ std::unordered_set<std::string> collectNormalizedURLs(const std::vector<GoItem>&
     return urls;
 }
 
+std::unordered_set<std::string> collectPageKeys(const std::vector<GoItem>& items)
+{
+    auto keys = std::unordered_set<std::string> {};
+
+    for (auto& item: items)
+        keys.insert(pageKey(item.url));
+
+    return keys;
+}
+
 GoItem makeHistoryRow(const HistoryEntry& entry)
 {
     auto title = entry.title.empty() ? entry.url : entry.title;
@@ -40,10 +50,10 @@ GoItem makeHistoryRow(const HistoryEntry& entry)
 std::vector<GoItem> appendHistoryRows(std::vector<GoItem> items,
                                       const std::vector<const HistoryEntry*>& entries)
 {
-    auto listedUrls = collectNormalizedURLs(items);
+    auto listedPages = collectPageKeys(items);
 
     for (auto* entry: entries)
-        if (listedUrls.insert(normalizeURL(entry->url)).second)
+        if (listedPages.insert(pageKey(entry->url)).second)
             items.push_back(makeHistoryRow(*entry));
 
     return items;
