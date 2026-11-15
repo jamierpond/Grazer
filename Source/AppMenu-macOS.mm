@@ -22,6 +22,8 @@ void install(Window& window, Actions actions)
     fileMenu.add(MenuItem::withAction(
         "New Window", [actions] { actions.newWindow(); }, commandKey("n")));
     fileMenu.add(MenuItem::withAction(
+        "New Tab", [actions] { actions.newTab(); }, commandKey("t")));
+    fileMenu.add(MenuItem::withAction(
         "Open Location…", [actions] { actions.openLocation(); }, commandKey("l")));
     fileMenu.add(MenuItem::withAction(
         "Save Page", [actions] { actions.savePage(); }, commandKey("s")));

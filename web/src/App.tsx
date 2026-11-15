@@ -4,18 +4,17 @@ import type { GoItem } from './generated/schema';
 import { useGoResults } from './state';
 
 // Dumb renderer over the native palette model: draw `results`, forward input.
-// Matching, ranking, selection and live preview all happen in C++.
+// Matching, ranking and selection all happen in C++.
 export default function App() {
     const results = useGoResults();
     const [query, setQuery] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
     const selectedRef = useRef<HTMLLIElement>(null);
 
-    // On open: pre-fill the input with the current URL, fully selected — it
-    // does NOT filter (the native query starts empty), it's there so
-    // ⌘L → ⌘A → ⌘C copies the URL, and any typing replaces it.
+    // On open: the input shows the native query (the current URL for ⌘L,
+    // empty for ⌘T), fully selected, so ⌘C copies it and typing replaces it.
     useEffect(() => {
-        setQuery(results.currentUrl);
+        setQuery(results.query);
         const focus = () => {
             inputRef.current?.focus();
             inputRef.current?.select();
@@ -88,11 +87,7 @@ export default function App() {
                     ))}
 
                     {results.items.length === 0 && (
-                        <li className="empty">
-                            {query
-                                ? `Enter ↳ search for “${query}”`
-                                : 'Nothing here yet'}
-                        </li>
+                        <li className="empty">Nothing here yet</li>
                     )}
                 </ul>
             </div>
@@ -105,8 +100,10 @@ type KeyAction =
     | 'up'
     | 'toggleBookmark'
     | 'clear'
+    | 'closeTabRow'
     | 'complete'
     | 'activate'
+    | 'activateInNewTab'
     | 'cancel';
 
 const ctrlKeyActions = new Map<string, KeyAction>([
@@ -116,6 +113,7 @@ const ctrlKeyActions = new Map<string, KeyAction>([
     ['p', 'up'],
     ['s', 'toggleBookmark'],
     ['x', 'clear'],
+    ['w', 'closeTabRow'],
 ]);
 
 const plainKeyActions = new Map<string, KeyAction>([
@@ -126,10 +124,14 @@ const plainKeyActions = new Map<string, KeyAction>([
     ['Escape', 'cancel'],
 ]);
 
+const isNewTabEnter = (e: React.KeyboardEvent) =>
+    e.key === 'Enter' && (e.metaKey || e.ctrlKey);
+
 function findKeyAction(
     e: React.KeyboardEvent,
     isCaretAtEnd: () => boolean,
 ): KeyAction | undefined {
+    if (isNewTabEnter(e)) return 'activateInNewTab';
     const plain = plainKeyActions.get(e.key);
     if (plain) return plain;
     if (e.key === 'ArrowRight' && isCaretAtEnd()) return 'complete';
@@ -143,55 +145,41 @@ function runKeyAction(
     completeSelection: () => void,
 ) {
     const item = results.items[results.selected];
-    const realItem = item && !item.isSearch ? item : undefined;
 
     const handlers: Record<KeyAction, () => void> = {
         down: () => void backend.moveSelection({ delta: 1 }),
         up: () => void backend.moveSelection({ delta: -1 }),
-        toggleBookmark: () => realItem && void backend.toggleBookmark(realItem),
-        clear: () => realItem && void backend.closeItem(realItem),
+        toggleBookmark: () => item?.canStar && void backend.toggleBookmark(item),
+        clear: () => item?.canClose && void backend.closeItem(item),
+        closeTabRow: () => item?.kind === 'tab' && void backend.closeTabRow(item),
         complete: completeSelection,
-        activate: () => void backend.activate(),
+        activate: () => void backend.activate({ inNewTab: false }),
+        activateInNewTab: () => void backend.activate({ inNewTab: true }),
         cancel: () => void backend.cancel(),
     };
 
     handlers[action]();
 }
 
-function SearchRow({
-    item,
-    selected,
-    rowRef,
-}: {
-    item: GoItem;
-    selected: boolean;
-    rowRef?: React.Ref<HTMLLIElement>;
-}) {
-    return (
-        <li
-            ref={rowRef}
-            className={`row search ${selected ? 'selected' : ''}`}
-            onClick={() => void backend.choose(item)}
-        >
-            <span className="magnifier">⌕</span>
-            <span className="text">
-                <span className="title">{item.title}</span>
-            </span>
-        </li>
-    );
-}
+const chooseRow = (item: GoItem, e: React.MouseEvent) =>
+    void backend.choose({ item, inNewTab: e.metaKey || e.ctrlKey });
 
-function getDotClass(item: GoItem) {
-    if (item.failed) return 'dead';
-    if (item.tabId >= 0) return 'open';
-    return '';
+// The row's kind, in an icon and a word, so rows of different kinds never look alike.
+function getKindLabel(item: GoItem): { icon: string; label: string; className: string } {
+    if (item.failed) return { icon: '!', label: "Didn't load", className: 'failed' };
+    if (item.isCurrent) return { icon: '▣', label: 'Current', className: 'current' };
+    if (item.kind === 'tab') return { icon: '▣', label: 'Switch to tab', className: 'tab' };
+    if (item.kind === 'place') return { icon: '★', label: 'Starred', className: 'place' };
+    if (item.kind === 'history') return { icon: '◷', label: 'History', className: 'history' };
+    if (item.kind === 'url') return { icon: '⊕', label: 'Open', className: 'url' };
+    return { icon: '⌕', label: 'Search', className: 'search' };
 }
 
 function StarButton({ item }: { item: GoItem }) {
     return (
         <button
             className={`star ${item.bookmarked ? 'active' : ''}`}
-            title={item.bookmarked ? 'Remove from places' : 'Save as place'}
+            title={item.bookmarked ? 'Unstar (^S)' : 'Star (^S)'}
             onClick={(e) => {
                 e.stopPropagation();
                 void backend.toggleBookmark(item);
@@ -206,7 +194,7 @@ function CloseButton({ item }: { item: GoItem }) {
     return (
         <button
             className="close"
-            title={item.tabId >= 0 ? 'Close tab (^X)' : 'Clear suggestion (^X)'}
+            title={item.kind === 'tab' ? 'Close tab (^X)' : 'Forget this page (^X)'}
             onClick={(e) => {
                 e.stopPropagation();
                 void backend.closeItem(item);
@@ -226,25 +214,25 @@ function Row({
     selected: boolean;
     rowRef?: React.Ref<HTMLLIElement>;
 }) {
-    if (item.isSearch) {
-        return <SearchRow item={item} selected={selected} rowRef={rowRef} />;
-    }
+    const kind = getKindLabel(item);
+    const isAction = item.kind === 'search' || item.kind === 'url';
 
     return (
         <li
             ref={rowRef}
-            className={`row ${selected ? 'selected' : ''} ${item.failed ? 'failed' : ''}`}
-            onClick={() => void backend.choose(item)}
+            className={`row ${kind.className} ${selected ? 'selected' : ''}`}
+            onClick={(e) => chooseRow(item, e)}
         >
-            <span className={`dot ${getDotClass(item)}`} />
+            <span className="icon">{kind.icon}</span>
 
             <span className="text">
                 <span className="title">{item.title || item.url}</span>
-                <span className="url">{item.url}</span>
+                {!isAction && <span className="url">{item.url}</span>}
             </span>
 
-            <StarButton item={item} />
-            <CloseButton item={item} />
+            {!isAction && <span className="kind">{kind.label}</span>}
+            {item.canStar && <StarButton item={item} />}
+            {item.canClose && <CloseButton item={item} />}
         </li>
     );
 }

@@ -4,9 +4,9 @@ import type { GoResults } from './generated/schema';
 
 const initial: GoResults = {
     items: [],
-    selected: 0,
+    selected: -1,
     generation: 0,
-    currentUrl: '',
+    query: '',
 };
 
 export const useGoResults = makeBridgeStore({

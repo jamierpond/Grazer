@@ -23,8 +23,12 @@ struct Actions
     // Ctrl+N there (see PageScript.h).
     std::function<void()> newWindow;
 
-    // File > Open Location... (Cmd+L): the front window's palette. A menu key
-    // equivalent, so it works whatever has focus or the page swallows.
+    // File > New Tab (Cmd+T): the front window's palette, opening rows in a new tab.
+    std::function<void()> newTab;
+
+    // File > Open Location... (Cmd+L): the front window's palette, opening rows
+    // in this tab. A menu key equivalent, so it works whatever has focus or the
+    // page swallows.
     std::function<void()> openLocation;
 
     // File > Save Page (Cmd+S): download the front window's page.

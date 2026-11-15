@@ -57,10 +57,7 @@ static std::string describePaletteRow(const GoItem& item)
     if (item.tabId >= 0)
         return "tab " + std::to_string(item.tabId) + " " + item.url;
 
-    if (item.bookmarked)
-        return "place " + item.url;
-
-    return "row \"" + item.title + "\" " + item.url;
+    return std::string {item.kind} + " \"" + item.title + "\" " + item.url;
 }
 
 // The page script posts "openPalette:<key>" for the vimium keys o and t.
@@ -69,6 +66,15 @@ static constexpr auto openPaletteCommand = std::string_view {"openPalette:"};
 static std::string getPaletteOpeningKey(const std::string& command)
 {
     return command.substr(openPaletteCommand.size()) + " key";
+}
+
+// t opens the palette for a new tab; o to go from the current one.
+static PaletteMode getPaletteModeForKey(const std::string& command)
+{
+    if (command.ends_with(":t"))
+        return PaletteMode::newTab;
+
+    return PaletteMode::goFromHere;
 }
 
 struct Tab
@@ -175,19 +181,24 @@ struct BrowserView final : View
     {
         api.onSetQuery = [this](const std::string& text) { setPaletteQuery(text); };
         api.onMoveSelection = [this](int delta) { movePaletteSelection(delta); };
-        api.onActivate = [this]
-        { Threads::callAsync([this] { activatePalette(); }); };
+        api.onActivate = [this](bool inNewTab)
+        { Threads::callAsync([this, inNewTab] { activatePalette(inNewTab); }); };
         api.onComplete = [this] { return completePalette(); };
-        api.onChoose = [this](const GoItem& item)
+        api.onChoose = [this](const GoItem& item, bool inNewTab)
         {
             auto chosen = item;
-            Threads::callAsync([this, chosen] { chooseItem(chosen); });
+            Threads::callAsync([this, chosen, inNewTab] { chooseItem(chosen, inNewTab); });
         };
         api.onCancel = [this] { Threads::callAsync([this] { cancelPalette(); }); };
         api.onCloseItem = [this](const GoItem& item)
         {
             auto cleared = item;
             Threads::callAsync([this, cleared] { clearItem(cleared); });
+        };
+        api.onCloseTabRow = [this](const GoItem& item)
+        {
+            auto row = item;
+            Threads::callAsync([this, row] { closeTabRow(row); });
         };
         api.onToggleBookmark = [this](const GoItem& item)
         { toggleBookmark(item.title, item.url); };
@@ -350,10 +361,15 @@ struct BrowserView final : View
             tab.view().loadURL(url);
     }
 
-    // Choosing a place from the palette on a home tab replaces home rather
-    // than leaving it behind.
-    void navigateHomeTabTo(Tab& tab, const std::string& url)
+    // The palette loading a row in this tab, or replacing a home tab with it.
+    void navigateTabTo(Tab& tab, const std::string& url)
     {
+        if (!isHomeURL(tab.url))
+        {
+            tab.view().loadURL(url);
+            return;
+        }
+
         tab.url = url;
         tab.openedUrl = url;
         tab.title.clear();
@@ -640,13 +656,13 @@ struct BrowserView final : View
         syncPalette();
     }
 
-    // The palette's ✕ / ctrl-x: remove whatever the row is -- close an open
-    // tab, unsave a place, or forget a history suggestion.
+    // The palette's ✕ / ctrl-x: close an open tab or forget a history page.
+    // Starred places have no ✕; their ★ unstars them.
     void clearItem(const GoItem& item)
     {
         LOG("palette x on ", describePaletteRow(item));
 
-        if (item.isSearch)
+        if (!item.canClose)
             return;
 
         if (item.tabId >= 0)
@@ -655,18 +671,18 @@ struct BrowserView final : View
             return;
         }
 
-        if (item.bookmarked)
-        {
-            LOG("palette x unstars ", item.url);
-            places.toggle(item.title, item.url);
-        }
-        else
-        {
-            LOG("palette x forgets history ", item.url);
-            history.forget(item.url);
-        }
-
+        LOG("palette x forgets history ", item.url);
+        history.forget(item.url);
         syncPalette();
+    }
+
+    // The palette's ctrl-w: close an open tab's row and keep the palette open.
+    void closeTabRow(const GoItem& item)
+    {
+        LOG("palette ctrl-w on ", describePaletteRow(item));
+
+        if (canCloseWithCtrlW(item))
+            closeTabById(item.tabId);
     }
 
     std::vector<std::int64_t> getActivationStamps() const
@@ -708,7 +724,24 @@ struct BrowserView final : View
 
     // --- Go palette -------------------------------------------------------------
 
-    void showPalette(const std::string& openedBy)
+    // Over Home the palette always makes a new tab, which then replaces Home.
+    PaletteMode choosePaletteMode(PaletteMode requested) const
+    {
+        if (activeTab != nullptr && isHomeURL(activeTab->url))
+            return PaletteMode::newTab;
+
+        return requested;
+    }
+
+    std::string getOpeningQuery() const
+    {
+        if (paletteMode == PaletteMode::newTab || activeTab == nullptr)
+            return {};
+
+        return activeTab->url;
+    }
+
+    void showPalette(PaletteMode requestedMode, const std::string& openedBy)
     {
         if (paletteOpen)
             return;
@@ -716,19 +749,22 @@ struct BrowserView final : View
         if (activeTab != nullptr)
             refreshTabURLFromWebView(*activeTab);
 
-        LOG("palette open via ",
-            openedBy,
-            ", input shows \"",
-            activeTab != nullptr ? activeTab->url : std::string {},
-            "\"");
-
         paletteOpen = true;
         originTab = activeTab;
-        paletteQuery.clear();
-        paletteSelected = 0;
-        paletteTouched = false;
+        paletteMode = choosePaletteMode(requestedMode);
+        paletteQuery = getOpeningQuery();
         generation++;
+        rebuildPaletteItems();
+        refilterPalette();
+        paletteSelected = findDefaultSelection(paletteFiltered);
         syncPalette();
+
+        LOG("palette open via ",
+            openedBy,
+            paletteMode == PaletteMode::newTab ? " (new tab)" : " (go from here)",
+            ", input \"",
+            paletteQuery,
+            "\"");
 
         addSubview(paletteWeb);
         paletteWeb.setBounds(getLocalBounds());
@@ -742,7 +778,6 @@ struct BrowserView final : View
 
         paletteOpen = false;
         originTab = nullptr;
-        previewDirty = false;
         paletteWeb.removeFromParent();
 
         if (activeTab != nullptr)
@@ -755,22 +790,30 @@ struct BrowserView final : View
             return;
 
         paletteQuery = text;
-        paletteSelected = 0;
-        paletteTouched = true;
         refilterPalette();
+        paletteSelected = findDefaultSelection(paletteFiltered);
         LOG("palette query \"", text, "\" lists ", paletteFiltered.size(), " rows");
         publishResults();
-        previewDirty = true;
     }
 
-    // Tab / →: the selected row's URL becomes the query, so it can be edited
+    std::optional<GoItem> getHighlightedRow() const
+    {
+        if (paletteSelected < 0 || paletteSelected >= (int) paletteFiltered.size())
+            return std::nullopt;
+
+        return paletteFiltered[(size_t) paletteSelected];
+    }
+
+    // Tab / →: the highlighted row's URL becomes the query, so it can be edited
     // and Enter opens what's typed. Returns the new input text ("" = no-op).
     std::string completePalette()
     {
-        if (!paletteOpen || paletteFiltered.empty())
+        auto row = getHighlightedRow();
+
+        if (!paletteOpen || !row)
             return {};
 
-        auto text = completionText(paletteFiltered[(size_t) paletteSelected], paletteQuery);
+        auto text = completionText(*row, paletteQuery);
         LOG("palette Tab completes the input to \"", text, "\"");
         setPaletteQuery(text);
         return text;
@@ -781,107 +824,66 @@ struct BrowserView final : View
         if (!paletteOpen || paletteFiltered.empty())
             return;
 
-        paletteSelected =
-            std::clamp(paletteSelected + delta, 0, (int) paletteFiltered.size() - 1);
-        paletteTouched = true;
+        auto start = std::max(paletteSelected, delta > 0 ? -1 : 0);
+        paletteSelected = std::clamp(start + delta, 0, (int) paletteFiltered.size() - 1);
         LOG("palette highlight row ",
             paletteSelected,
             ": ",
             describePaletteRow(paletteFiltered[(size_t) paletteSelected]));
         publishResults();
-        previewDirty = false;
-        previewSelected();
     }
 
-    // Enter. A touched tab selection was already previewed live; a place or
-    // the search row loads now. An untouched palette dismisses without moving.
-    void activatePalette()
+    // Enter / ⌘Enter: open the highlighted row. With none, nothing happens.
+    void activatePalette(bool inNewTab)
     {
         if (!paletteOpen)
             return;
 
-        if (paletteTouched && !paletteFiltered.empty())
+        auto row = getHighlightedRow();
+
+        if (!row)
         {
-            auto& item = paletteFiltered[(size_t) paletteSelected];
-            LOG("palette Enter on ", describePaletteRow(item));
-            openItem(item);
+            LOG("palette Enter did nothing: no row highlighted");
             return;
         }
 
-        if (paletteFiltered.empty())
-            LOG("palette Enter did nothing: no rows; palette closes");
-        else
-            LOG("palette Enter did nothing: untouched; palette closes");
-
-        hidePalette();
+        LOG("palette Enter on ", describePaletteRow(*row), inNewTab ? " (cmd)" : "");
+        openItem(*row, inNewTab);
     }
 
-    void chooseItem(const GoItem& item)
+    void chooseItem(const GoItem& item, bool inNewTab)
     {
         if (!paletteOpen)
             return;
 
-        LOG("palette click on ", describePaletteRow(item));
-        openItem(item);
+        LOG("palette click on ", describePaletteRow(item), inNewTab ? " (cmd)" : "");
+        openItem(item, inNewTab);
     }
 
-    void previewSelected()
+    void openItem(const GoItem& item, bool inNewTab)
     {
-        if (!paletteOpen || !paletteTouched)
-            return;
+        auto opening = decidePaletteOpening(item, paletteMode, inNewTab);
+        auto* current = activeTab;
+        hidePalette();
 
-        if (paletteSelected < (int) paletteFiltered.size())
-            previewItem(paletteFiltered[(size_t) paletteSelected]);
-    }
-
-    // Typing debounce: setPaletteQuery only marks the preview dirty; this 8 Hz
-    // tick applies it, so a fast typist doesn't load a page per keystroke.
-    void handlePreviewTick()
-    {
-        if (!previewDirty)
-            return;
-
-        previewDirty = false;
-        previewSelected();
-    }
-
-    // Selection moved in the palette: switching between OPEN tabs previews
-    // live underneath (it's free), so Enter only dismisses. Places that
-    // aren't open would cost a page load per selection change, so they only
-    // load when actually chosen (Enter / click).
-    void previewItem(const GoItem& item)
-    {
-        if (!paletteOpen || item.tabId < 0)
-            return;
-
-        if (auto* tab = findTab(item.tabId))
-            switchTo(*tab);
-    }
-
-    void openItem(const GoItem& item)
-    {
-        mru.touch(normalizeURL(item.url));
-
-        if (item.tabId >= 0)
+        if (opening == PaletteOpening::switchToTab)
         {
             LOG("palette opens: switch to tab ", item.tabId);
 
             if (auto* tab = findTab(item.tabId))
                 switchTo(*tab);
         }
-        else if (activeTab != nullptr && isHomeURL(activeTab->url)
-                 && !isHomeURL(item.url))
+        else if (current != nullptr
+                 && (opening == PaletteOpening::loadInThisTab || isHomeURL(current->url)))
         {
-            LOG("palette opens: load in home tab ", activeTab->id, " ", item.url);
-            navigateHomeTabTo(*activeTab, item.url);
+            LOG("palette opens: load in tab ", current->id, " ", item.url);
+            navigateTabTo(*current, item.url);
         }
         else
         {
             LOG("palette opens: new tab ", item.url);
             openTab(item.url);
         }
-
-        hidePalette();
     }
 
     void cancelPalette()
@@ -929,41 +931,48 @@ struct BrowserView final : View
             + ")");
     }
 
-    void rebuildPaletteItems()
+    // Home tabs are never rows.
+    std::vector<PaletteTab> listPaletteTabs() const
     {
-        auto tabItems = std::vector<GoItem> {};
+        auto paletteTabs = std::vector<PaletteTab> {};
 
         for (auto& tab: tabs)
         {
-            auto item = GoItem {};
-            item.tabId = tab->id;
-            item.title = tab->title.empty() ? tab->url : tab->title;
-            item.url = tab->url;
-            item.failed = tab->failed;
-            tabItems.push_back(std::move(item));
+            if (isHomeURL(tab->url))
+                continue;
+
+            auto paletteTab = PaletteTab {};
+            paletteTab.tabId = tab->id;
+            paletteTab.title = tab->title;
+            paletteTab.url = tab->url;
+            paletteTab.failed = tab->failed;
+            paletteTab.lastViewedAtMs = tab->activatedAtMs.empty() ? 0 : tab->activatedAtMs.back();
+            paletteTab.isCurrent = tab.get() == originTab;
+            paletteTabs.push_back(std::move(paletteTab));
         }
 
-        paletteAll = mergePaletteItems(std::move(tabItems),
-                                       places.all(),
-                                       [this](const std::string& url)
-                                       { return mru.lastUsed(url); });
+        return paletteTabs;
     }
 
+    void rebuildPaletteItems()
+    {
+        paletteAll = listPaletteRows(listPaletteTabs(),
+                                     places.all(),
+                                     [this](const std::string& url)
+                                     { return mru.lastUsed(url); });
+    }
+
+    // Keeps the highlight on its row index, or none if there was none.
     void refilterPalette()
     {
-        paletteFiltered = rankPalette(paletteAll, history.all(), paletteQuery);
+        paletteFiltered = rankPalette(paletteAll, history.all(), paletteQuery, paletteMode);
 
-        auto last = std::max((int) paletteFiltered.size() - 1, 0);
-        paletteSelected = std::clamp(paletteSelected, 0, last);
+        paletteSelected = keepSelectionInRange(paletteSelected, paletteFiltered.size());
     }
 
     void publishResults()
     {
-        api.results.publish(
-            {paletteFiltered,
-             paletteSelected,
-             generation,
-             activeTab != nullptr ? activeTab->url : std::string {}});
+        api.results.publish({paletteFiltered, paletteSelected, generation, paletteQuery});
     }
 
     // --- Page commands ----------------------------------------------------------
@@ -976,7 +985,7 @@ struct BrowserView final : View
                 syncPalette();
         }
         else if (command.starts_with(openPaletteCommand))
-            showPalette(getPaletteOpeningKey(command));
+            showPalette(getPaletteModeForKey(command), getPaletteOpeningKey(command));
         else if (command == "toggleBookmark")
         {
             if (activeTab != nullptr)
@@ -1145,16 +1154,14 @@ struct BrowserView final : View
     std::int64_t& nextTabId = browser.nextTabId;
     std::int64_t generation = 0;
     bool paletteOpen = false;
-    bool paletteTouched = false;
-    bool previewDirty = false;
-    int paletteSelected = 0;
+    PaletteMode paletteMode = PaletteMode::goFromHere;
+    int paletteSelected = -1;
     std::string paletteQuery;
     std::vector<GoItem> paletteAll;
     std::vector<GoItem> paletteFiltered;
     WebView chromeBar {getWebViewOptions()};
     WebView paletteWeb {paletteOptions()};
     WebViewBridge transport {paletteWeb};
-    Threads::Timer previewTimer {[this] { handlePreviewTick(); }, 8};
 
     static constexpr auto idleTabCheckInterval = Time::MS {5 * 60 * 1000};
     Threads::Timer idleTabTimer {[this] { closeIdleTabs(); }, idleTabCheckInterval};
@@ -1589,10 +1596,19 @@ struct GrazerApp
             .find = [this](const std::string& call)
             { runInFrontWindow([&](BrowserView& view) { view.findInPage(call); }); },
             .newWindow = [this] { browser.openWindow({}); },
+            .newTab = [this]
+            {
+                runInFrontWindow(
+                    [](BrowserView& view)
+                    { view.showPalette(PaletteMode::newTab, "File > New Tab (cmd-T)"); });
+            },
             .openLocation = [this]
             {
-                runInFrontWindow([](BrowserView& view)
-                                 { view.showPalette("File > Open Location (cmd-L)"); });
+                runInFrontWindow(
+                    [](BrowserView& view) {
+                        view.showPalette(PaletteMode::goFromHere,
+                                         "File > Open Location (cmd-L)");
+                    });
             },
             .savePage = [this]
             {
@@ -1673,7 +1689,7 @@ struct SnapshotApp
 
         if (snapshotRequest.palette && !view.paletteOpen)
         {
-            view.showPalette("snapshot --palette");
+            view.showPalette(PaletteMode::goFromHere, "snapshot --palette");
             settledTicks = 6;
             return;
         }

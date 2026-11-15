@@ -10,8 +10,20 @@ namespace grazer
 {
 namespace
 {
-constexpr auto tightPerLetter = 4;
+// A hit needs about half the per-letter score of a consecutive run: letters
+// scattered through a long URL still score above 0 off '/', '.', '&' boundaries.
+constexpr auto hitScorePerLetter = 4;
+
+// A hit this good (most letters in consecutive runs) beats searching for the text.
+constexpr auto strongHitScorePerLetter = 6;
+
 constexpr std::size_t maxHitRows = 50;
+
+struct ScoredRow
+{
+    int score = 0;
+    GoItem row;
+};
 
 int letterCount(const std::string& query)
 {
@@ -19,193 +31,304 @@ int letterCount(const std::string& query)
         query.begin(), query.end(), [](char character) { return character != ' '; });
 }
 
-std::unordered_set<std::string> collectNormalizedURLs(const std::vector<GoItem>& items)
-{
-    auto urls = std::unordered_set<std::string> {};
-
-    for (auto& item: items)
-        urls.insert(normalizeURL(item.url));
-
-    return urls;
-}
-
-std::unordered_set<std::string> collectPageKeys(const std::vector<GoItem>& items)
+std::unordered_set<std::string> collectPageKeys(const std::vector<GoItem>& rows)
 {
     auto keys = std::unordered_set<std::string> {};
 
-    for (auto& item: items)
-        keys.insert(pageKey(item.url));
+    for (auto& row: rows)
+        keys.insert(pageKey(row.url));
 
     return keys;
 }
 
+GoItem makeTabRow(const PaletteTab& tab, bool bookmarked)
+{
+    auto row = GoItem {};
+    row.tabId = tab.tabId;
+    row.title = tab.title.empty() ? tab.url : tab.title;
+    row.url = tab.url;
+    row.bookmarked = bookmarked;
+    row.kind = GoKind::tab;
+    row.failed = tab.failed;
+    row.isCurrent = tab.isCurrent;
+    row.canClose = true;
+    row.canStar = true;
+    return row;
+}
+
+GoItem makePlaceRow(const Place& place)
+{
+    auto row = GoItem {};
+    row.title = place.title;
+    row.url = place.url;
+    row.bookmarked = true;
+    row.kind = GoKind::place;
+    row.canStar = true;
+    return row;
+}
+
 GoItem makeHistoryRow(const HistoryEntry& entry)
 {
-    auto title = entry.title.empty() ? entry.url : entry.title;
-    return {-1, title, entry.url};
+    auto row = GoItem {};
+    row.title = entry.title.empty() ? entry.url : entry.title;
+    row.url = entry.url;
+    row.kind = GoKind::history;
+    row.canClose = true;
+    row.canStar = true;
+    return row;
 }
 
-// Every history entry not already listed, in the order given.
-std::vector<GoItem> appendHistoryRows(std::vector<GoItem> items,
-                                      const std::vector<const HistoryEntry*>& entries)
+GoItem makeSearchRow(const std::string& query)
 {
-    auto listedPages = collectPageKeys(items);
-
-    for (auto* entry: entries)
-        if (listedPages.insert(pageKey(entry->url)).second)
-            items.push_back(makeHistoryRow(*entry));
-
-    return items;
+    auto row = GoItem {};
+    row.title = "Search Google for “" + query + "”";
+    row.url = navigationURL(query);
+    row.kind = GoKind::search;
+    return row;
 }
 
-std::vector<GoItem> appendHistoryRows(const std::vector<GoItem>& items,
+GoItem makeTypedURLRow(const std::string& query, PaletteMode mode)
+{
+    auto row = GoItem {};
+    row.title = mode == PaletteMode::goFromHere ? "Open " + query + " in this tab"
+                                                : "Open " + query;
+    row.url = navigationURL(query);
+    row.kind = GoKind::typedURL;
+    return row;
+}
+
+std::vector<PaletteTab> sortTabsByLastViewed(std::vector<PaletteTab> tabs)
+{
+    std::stable_sort(tabs.begin(),
+                     tabs.end(),
+                     [](const PaletteTab& a, const PaletteTab& b)
+                     { return a.lastViewedAtMs > b.lastViewedAtMs; });
+    return tabs;
+}
+
+std::vector<GoItem> listPlacesNotOpen(const std::vector<Place>& places,
+                                      const std::unordered_set<std::string>& openPages,
+                                      const LastUsedFn& placeLastUsed)
+{
+    auto rows = std::vector<GoItem> {};
+    auto listedPages = openPages;
+
+    for (auto& place: places)
+        if (listedPages.insert(pageKey(place.url)).second)
+            rows.push_back(makePlaceRow(place));
+
+    std::stable_sort(rows.begin(),
+                     rows.end(),
+                     [&](const GoItem& a, const GoItem& b) {
+                         return placeLastUsed(normalizeURL(a.url))
+                                > placeLastUsed(normalizeURL(b.url));
+                     });
+    return rows;
+}
+
+// Every history entry whose page isn't already a row, in the order given.
+std::vector<GoItem> appendHistoryRows(std::vector<GoItem> rows,
                                       const std::vector<HistoryEntry>& history)
 {
-    auto entries = std::vector<const HistoryEntry*> {};
+    auto listedPages = collectPageKeys(rows);
 
     for (auto& entry: history)
-        entries.push_back(&entry);
+        if (listedPages.insert(pageKey(entry.url)).second)
+            rows.push_back(makeHistoryRow(entry));
 
-    return appendHistoryRows(items, entries);
+    return rows;
 }
 
-std::vector<std::pair<int, const GoItem*>> scoreHits(const std::vector<GoItem>& candidates,
-                                                     const std::string& query)
+std::vector<ScoredRow> scoreHits(const std::vector<GoItem>& candidates,
+                                 const std::string& query)
 {
-    auto scored = std::vector<std::pair<int, const GoItem*>> {};
+    auto scored = std::vector<ScoredRow> {};
+    auto minimumHitScore = hitScorePerLetter * letterCount(query);
 
-    // A hit needs about half the per-letter score of a consecutive run: letters
-    // scattered through a long URL still score above 0 off '/', '.', '&' boundaries.
-    auto minimumHitScore = tightPerLetter * letterCount(query);
-
-    for (auto& item: candidates)
+    for (auto& row: candidates)
     {
-        auto score = fuzzyScore(query, item.title + " " + item.url);
+        auto score = fuzzyScore(query, row.title + " " + row.url);
 
         if (score && *score >= minimumHitScore)
-            scored.push_back({*score, &item});
+            scored.push_back({*score, row});
     }
 
     std::stable_sort(scored.begin(),
                      scored.end(),
-                     [](const auto& a, const auto& b) { return a.first > b.first; });
+                     [](const ScoredRow& a, const ScoredRow& b) { return a.score > b.score; });
 
     if (scored.size() > maxHitRows)
         scored.resize(maxHitRows);
 
     return scored;
 }
+
+bool isSinkingRow(const GoItem& row)
+{
+    return row.failed || row.isCurrent;
+}
+
+// Live hits sort first, then failed pages, then the current tab.
+constexpr auto liveRowLevel = 0;
+constexpr auto failedRowLevel = 1;
+constexpr auto currentTabLevel = 2;
+
+int getSinkLevel(const GoItem& row)
+{
+    if (row.isCurrent)
+        return currentTabLevel;
+
+    return row.failed ? failedRowLevel : liveRowLevel;
+}
+
+// Hits in score order, failed pages and the current tab moved to the end.
+std::vector<GoItem> orderHitsForDisplay(const std::vector<ScoredRow>& hits)
+{
+    auto ordered = std::vector<GoItem> {};
+
+    for (auto& hit: hits)
+        ordered.push_back(hit.row);
+
+    std::stable_sort(ordered.begin(),
+                     ordered.end(),
+                     [](const GoItem& a, const GoItem& b)
+                     { return getSinkLevel(a) < getSinkLevel(b); });
+    return ordered;
+}
+
+// Typed text that looks like a URL: the row already showing that exact URL
+// goes first, else the row that opens it.
+std::vector<GoItem> putURLActionFirst(std::vector<GoItem> rows,
+                                      const std::string& query,
+                                      PaletteMode mode)
+{
+    auto target = normalizeURL(query);
+    auto exact = std::find_if(rows.begin(),
+                              rows.end(),
+                              [&](const GoItem& row) {
+                                  return !isSinkingRow(row) && normalizeURL(row.url) == target;
+                              });
+
+    if (exact == rows.end())
+        rows.insert(rows.begin(), makeTypedURLRow(query, mode));
+    else
+        std::rotate(rows.begin(), exact, exact + 1);
+
+    return rows;
+}
+
+// The best hit that isn't failed or the current tab beats searching for the text.
+bool isBestRowAStrongHit(const std::vector<ScoredRow>& hits, const std::string& query)
+{
+    auto best = std::find_if(hits.begin(),
+                             hits.end(),
+                             [](const ScoredRow& hit) { return !isSinkingRow(hit.row); });
+
+    return best != hits.end()
+           && best->score >= strongHitScorePerLetter * letterCount(query);
+}
+
+// A history row for this very search would repeat the search row.
+std::vector<GoItem> removePastSearches(std::vector<GoItem> rows, const std::string& query)
+{
+    auto searchURL = normalizeURL(navigationURL(query));
+
+    std::erase_if(rows,
+                  [&](const GoItem& row)
+                  { return row.kind == GoKind::history && normalizeURL(row.url) == searchURL; });
+    return rows;
+}
+
+// Typed words: a strong best hit stays first with search second; otherwise
+// search goes first.
+std::vector<GoItem> placeSearchRow(std::vector<GoItem> rows,
+                                   const std::vector<ScoredRow>& hits,
+                                   const std::string& query)
+{
+    auto searchPosition = isBestRowAStrongHit(hits, query) ? 1 : 0;
+    rows.insert(rows.begin() + searchPosition, makeSearchRow(query));
+    return rows;
+}
 } // namespace
 
-std::vector<GoItem> mergePaletteItems(std::vector<GoItem> tabs,
-                                      const std::vector<Place>& places,
-                                      const LastUsedFn& lastUsed)
+std::vector<GoItem> listPaletteRows(const std::vector<PaletteTab>& tabs,
+                                    const std::vector<Place>& places,
+                                    const LastUsedFn& placeLastUsed)
 {
-    auto placeUrls = std::unordered_set<std::string> {};
+    auto starredPages = std::unordered_set<std::string> {};
 
     for (auto& place: places)
-        placeUrls.insert(normalizeURL(place.url));
+        starredPages.insert(pageKey(place.url));
 
-    auto items = std::move(tabs);
+    auto rows = std::vector<GoItem> {};
+    auto current = std::vector<GoItem> {};
 
-    for (auto& item: items)
-        item.bookmarked = placeUrls.contains(normalizeURL(item.url));
-
-    auto listedUrls = collectNormalizedURLs(items);
-
-    for (auto& place: places)
-        if (listedUrls.insert(normalizeURL(place.url)).second)
-            items.push_back({-1, place.title, place.url, true});
-
-    // MRU is the palette's base order: whatever you used last is on top. The
-    // fuzzy re-rank in rankPalette is stable, so equal scores keep this
-    // order too.
-    std::stable_sort(
-        items.begin(),
-        items.end(),
-        [&](const GoItem& a, const GoItem& b)
-        { return lastUsed(normalizeURL(a.url)) > lastUsed(normalizeURL(b.url)); });
-
-    return items;
-}
-
-std::vector<GoItem> rankPalette(const std::vector<GoItem>& all,
-                                const std::vector<HistoryEntry>& history,
-                                const std::string& query)
-{
-    if (query.empty())
-        return all;
-
-    auto candidates = appendHistoryRows(all, history);
-    auto scored = scoreHits(candidates, query);
-
-    auto ranked = std::vector<GoItem> {};
-
-    // Dead pages (failed navigations) must not outrank search -- they sink
-    // below the search row, appended at the very end.
-    for (auto& [score, item]: scored)
-        if (!item->failed)
-            ranked.push_back(*item);
-
-    auto dead = std::vector<GoItem> {};
-
-    for (auto& [score, item]: scored)
-        if (item->failed)
-            dead.push_back(*item);
-
-    auto finish = [&](std::vector<GoItem> list)
+    for (auto& tab: sortTabsByLastViewed(tabs))
     {
-        list.insert(list.end(), dead.begin(), dead.end());
-        return list;
-    };
-
-    auto row = searchRow(query);
-
-    // A URL-shaped query means "take me to this URL": an EXACT normalized
-    // match wins and REPLACES the search row (same action, better row) --
-    // typing github.com picks the GitHub tab or place. Without one, the
-    // search row is pinned first so a mere fuzzy hit can't steal Enter --
-    // google.com opens google.com, not the mail.google.com tab.
-    if (looksLikeURL(query))
-    {
-        auto target = normalizeURL(query);
-        auto exact = std::find_if(ranked.begin(),
-                                  ranked.end(),
-                                  [&](const GoItem& item)
-                                  { return normalizeURL(item.url) == target; });
-
-        if (exact == ranked.end())
-            ranked.insert(ranked.begin(), std::move(row));
-        else
-            std::rotate(ranked.begin(), exact, exact + 1);
-
-        return finish(std::move(ranked));
+        auto row = makeTabRow(tab, starredPages.contains(pageKey(tab.url)));
+        auto& list = tab.isCurrent ? current : rows;
+        list.push_back(std::move(row));
     }
 
-    // A history row for this exact search would duplicate the pinned search
-    // row (searching "hacker news" twice, say) -- the action row is the one
-    // that stays. Open tabs keep theirs: they're switchable.
-    auto rowUrl = normalizeURL(row.url);
-    std::erase_if(ranked,
-                  [&](const GoItem& item)
-                  { return item.tabId < 0 && normalizeURL(item.url) == rowUrl; });
+    auto openPages = collectPageKeys(rows);
+    openPages.merge(collectPageKeys(current));
 
-    ranked.push_back(std::move(row));
-    return finish(std::move(ranked));
+    for (auto& place: listPlacesNotOpen(places, openPages, placeLastUsed))
+        rows.push_back(std::move(place));
+
+    rows.insert(rows.end(), current.begin(), current.end());
+    return rows;
 }
 
-GoItem searchRow(const std::string& query)
+std::vector<GoItem> rankPalette(const std::vector<GoItem>& rows,
+                                const std::vector<HistoryEntry>& history,
+                                const std::string& query,
+                                PaletteMode mode)
 {
-    auto row = GoItem {};
-    row.title =
-        looksLikeURL(query) ? "Open " + query : "Search Google for “" + query + "”";
-    row.url = navigationURL(query);
-    row.isSearch = true;
-    return row;
+    if (query.empty())
+        return rows;
+
+    auto candidates = appendHistoryRows(rows, history);
+
+    if (looksLikeURL(query))
+        return putURLActionFirst(orderHitsForDisplay(scoreHits(candidates, query)), query, mode);
+
+    auto hits = scoreHits(removePastSearches(std::move(candidates), query), query);
+    return placeSearchRow(orderHitsForDisplay(hits), hits, query);
+}
+
+int findDefaultSelection(const std::vector<GoItem>& rows)
+{
+    if (rows.empty() || rows.front().isCurrent)
+        return -1;
+
+    return 0;
+}
+
+int keepSelectionInRange(int selected, std::size_t rowCount)
+{
+    auto last = (int) rowCount - 1;
+    return std::min(selected, last);
+}
+
+bool canCloseWithCtrlW(const GoItem& item)
+{
+    return item.kind == GoKind::tab;
+}
+
+PaletteOpening decidePaletteOpening(const GoItem& item, PaletteMode mode, bool inNewTab)
+{
+    if (item.tabId >= 0)
+        return PaletteOpening::switchToTab;
+
+    if (inNewTab || mode == PaletteMode::newTab)
+        return PaletteOpening::openInNewTab;
+
+    return PaletteOpening::loadInThisTab;
 }
 
 std::string completionText(const GoItem& item, const std::string& query)
 {
-    return item.isSearch ? query : item.url;
+    return item.kind == GoKind::search ? query : item.url;
 }
 } // namespace grazer

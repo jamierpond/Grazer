@@ -81,24 +81,38 @@ body,
     background: rgba(90, 130, 255, 0.28);
 }
 
-.dot {
-    flex: 0 0 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.15);
+.icon {
+    flex: 0 0 auto;
+    width: 16px;
+    text-align: center;
+    font-size: 14px;
+    line-height: 1;
+    color: rgba(255, 255, 255, 0.55);
 }
 
-.dot.open {
-    background: #63d47e;
+.row.tab .icon,
+.row.current .icon {
+    color: #63d47e;
 }
 
-.dot.dead {
-    background: #e0645c;
+.row.place .icon {
+    color: #ffd76e;
+}
+
+.row.failed .icon,
+.row.failed .kind {
+    color: #e0645c;
 }
 
 .row.failed .title,
 .row.failed .url {
     opacity: 0.55;
+}
+
+.kind {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.45);
 }
 
 .text {
@@ -150,15 +164,7 @@ body,
     font-size: 13px;
 }
 
-.magnifier {
-    flex: 0 0 auto;
-    width: 16px;
-    text-align: center;
-    font-size: 16px;
-    line-height: 1;
-    color: rgba(255, 255, 255, 0.55);
-}
-
-.row.search .title {
+.row.search .title,
+.row.url .title {
     color: rgba(255, 255, 255, 0.75);
 }

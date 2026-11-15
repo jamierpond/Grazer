@@ -13,23 +13,63 @@ namespace grazer
 {
 using LastUsedFn = std::function<std::int64_t(const std::string& normalizedUrl)>;
 
-// The palette's base list when browsing (no query): open tabs plus places
-// that aren't already open, most-recently-used first. `tabs` come in tab
-// order with tabId/title/url set; their bookmarked flag is derived from
-// `places` here.
-std::vector<GoItem> mergePaletteItems(std::vector<GoItem> tabs,
-                                      const std::vector<Place>& places,
-                                      const LastUsedFn& lastUsed);
+// ⌘L / o opens the palette to go somewhere from the current tab; ⌘T / t opens
+// it to make a new tab. Rows that aren't open tabs open accordingly.
+enum class PaletteMode
+{
+    goFromHere,
+    newTab
+};
 
-// The list for the current query. Empty query: `all` (open tabs and
-// starred places), no history. Otherwise fuzzy-rank `all` plus history
-// rows (skipping URLs already present), keep the best real hits only, and pin the search row at the bottom so search is always
-// one arrow-down away -- and the default when nothing matches.
-std::vector<GoItem> rankPalette(const std::vector<GoItem>& all,
+// An open tab as the palette lists it. Home tabs are never passed in.
+struct PaletteTab
+{
+    std::int64_t tabId = -1;
+    std::string title;
+    std::string url;
+    bool failed = false;
+    std::int64_t lastViewedAtMs = 0;
+    bool isCurrent = false;
+};
+
+// The palette's rows before any typing: open tabs by last viewed, then starred
+// places that aren't open (most recently used first), then the current tab.
+// An open starred place is one row, the tab, marked bookmarked.
+std::vector<GoItem> listPaletteRows(const std::vector<PaletteTab>& tabs,
+                                    const std::vector<Place>& places,
+                                    const LastUsedFn& placeLastUsed);
+
+// The rows for `query`. Empty: `rows` unchanged, no history. Otherwise row 0 is
+// the best action: for URL-like text the exact tab/place/history match, else
+// "Open <url>"; for words a strong fuzzy hit with "Search Google for …" second,
+// else search first. Failed pages sink to the end, the current tab after them.
+std::vector<GoItem> rankPalette(const std::vector<GoItem>& rows,
                                 const std::vector<HistoryEntry>& history,
-                                const std::string& query);
+                                const std::string& query,
+                                PaletteMode mode);
 
-GoItem searchRow(const std::string& query);
+// The row highlighted for Enter: 0, or -1 when there are no rows or the only
+// row is the current tab.
+int findDefaultSelection(const std::vector<GoItem>& rows);
+
+// The highlight after the list changed under it (a row closed, say): the same
+// index, so the next row takes the closed one's place; the last row if the list
+// got shorter than that; -1 stays -1.
+int keepSelectionInRange(int selected, std::size_t rowCount);
+
+// Whether ctrl-w closes this row: open tabs only.
+bool canCloseWithCtrlW(const GoItem& item);
+
+enum class PaletteOpening
+{
+    switchToTab,
+    loadInThisTab,
+    openInNewTab
+};
+
+// What choosing `item` does: an open tab is switched to; anything else loads in
+// this tab in go-from-here mode, in a new tab in new-tab mode or with ⌘.
+PaletteOpening decidePaletteOpening(const GoItem& item, PaletteMode mode, bool inNewTab);
 
 // What Tab / → puts in the input for `item`, ready to keep typing: the row's
 // URL, or for the search row the query it searches for.

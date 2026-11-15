@@ -9,10 +9,26 @@ using namespace grazer;
 
 namespace
 {
-std::vector<GoItem> someTabs()
+constexpr auto goFromHere = PaletteMode::goFromHere;
+constexpr auto newTab = PaletteMode::newTab;
+
+PaletteTab makeTab(std::int64_t id,
+                   const std::string& title,
+                   const std::string& url,
+                   std::int64_t lastViewedAtMs = 0)
 {
-    return {{0, "GitHub", "https://github.com"},
-            {1, "Hacker News", "https://news.ycombinator.com"}};
+    auto tab = PaletteTab {};
+    tab.tabId = id;
+    tab.title = title;
+    tab.url = url;
+    tab.lastViewedAtMs = lastViewedAtMs;
+    return tab;
+}
+
+std::vector<PaletteTab> someTabs()
+{
+    return {makeTab(0, "GitHub", "https://github.com", 100),
+            makeTab(1, "Hacker News", "https://news.ycombinator.com", 200)};
 }
 
 std::vector<Place> somePlaces()
@@ -28,77 +44,145 @@ LastUsedFn lastUsedFrom(std::map<std::string, std::int64_t> stamps)
         return it != stamps.end() ? it->second : 0;
     };
 }
+
+std::vector<GoItem> someRows()
+{
+    return listPaletteRows(someTabs(), somePlaces(), lastUsedFrom({}));
+}
+
+std::vector<GoItem> rank(const std::vector<GoItem>& rows,
+                         const std::vector<HistoryEntry>& history,
+                         const std::string& query)
+{
+    return rankPalette(rows, history, query, goFromHere);
+}
+
+GoItem makeTabRow(std::int64_t id, const std::string& title, const std::string& url)
+{
+    return listPaletteRows({makeTab(id, title, url)}, {}, lastUsedFrom({})).front();
+}
 } // namespace
 
 auto tOpenPlacesAreNotDuplicated =
-    test("Palette/a place that's already an open tab appears once") = []
+    test("Palette/a starred place that's also an open tab shows once, as the tab with a star") = []
 {
-    auto items = mergePaletteItems(someTabs(), somePlaces(), lastUsedFrom({}));
+    auto rows = someRows();
 
     auto githubRows = 0;
 
-    for (auto& item: items)
-        if (item.url.find("github.com") != std::string::npos)
-            githubRows++;
+    for (auto& row: rows)
+    {
+        if (row.url.find("github.com") == std::string::npos)
+            continue;
+
+        githubRows++;
+        check(row.kind == GoKind::tab);
+        check(row.bookmarked);
+    }
 
     check(githubRows == 1);
-    check(items.size() == 3); // two tabs + linear
+    check(rows.size() == 3);
 };
 
-auto tTabsInheritBookmarkFlag =
-    test("Palette/an open tab of a saved place shows as bookmarked") = []
+auto tTabsByLastViewedThenPlaces =
+    test("Palette/no text lists tabs by last viewed, then starred places not open") = []
 {
-    auto items = mergePaletteItems(someTabs(), somePlaces(), lastUsedFrom({}));
+    auto rows = listPaletteRows(
+        someTabs(), somePlaces(), lastUsedFrom({{"linear.app", 999}}));
 
-    for (auto& item: items)
-    {
-        if (item.tabId == 0)
-            check(item.bookmarked);
-
-        if (item.tabId == 1)
-            check(!item.bookmarked);
-    }
+    check(rows[0].url == "https://news.ycombinator.com");
+    check(rows[1].url == "https://github.com");
+    check(rows[2].url == "https://linear.app");
+    check(rows[2].kind == GoKind::place);
 };
 
-auto tMruOrdersBrowseList = test("Palette/most recently used comes first") = []
+auto tCurrentTabListedLast =
+    test("Palette/the current tab is listed last and is never the Enter default") = []
 {
-    auto items = mergePaletteItems(
-        someTabs(),
-        somePlaces(),
-        lastUsedFrom({{"linear.app", 300}, {"news.ycombinator.com", 200}}));
+    auto tabs = someTabs();
+    tabs[1].isCurrent = true;
 
-    check(items[0].url == "https://linear.app");
-    check(items[1].url == "https://news.ycombinator.com");
+    auto rows = listPaletteRows(tabs, somePlaces(), lastUsedFrom({}));
+
+    check(rows.back().tabId == 1);
+    check(rows.back().isCurrent);
+    check(findDefaultSelection(rows) == 0);
+    check(!rows[(std::size_t) findDefaultSelection(rows)].isCurrent);
 };
 
-auto tEmptyQueryKeepsBrowseList =
-    test("Palette/an empty query returns the browse list untouched") = []
+auto tOnlyCurrentTabHasNoSelection =
+    test("Palette/with only the current tab listed nothing is highlighted") = []
 {
-    auto all = mergePaletteItems(someTabs(), somePlaces(), lastUsedFrom({}));
-    auto ranked = rankPalette(all, {}, "");
+    auto tab = makeTab(0, "GitHub", "https://github.com");
+    tab.isCurrent = true;
 
-    check(ranked.size() == all.size());
+    check(findDefaultSelection(listPaletteRows({tab}, {}, lastUsedFrom({}))) == -1);
+    check(findDefaultSelection({}) == -1);
 };
 
-auto tQueryFiltersAndAppendsSearch =
-    test("Palette/a query filters and pins the search row last") = []
+auto tCurrentTabNeverFirstWhenTyping =
+    test("Palette/typing the current tab's name still lists it last") = []
 {
-    auto all = mergePaletteItems(someTabs(), somePlaces(), lastUsedFrom({}));
-    auto ranked = rankPalette(all, {}, "github");
+    auto tabs = someTabs();
+    tabs[0].isCurrent = true;
+    auto ranked = rank(listPaletteRows(tabs, {}, lastUsedFrom({})), {}, "github");
+
+    check(ranked.front().kind == GoKind::search);
+    check(ranked.back().isCurrent);
+};
+
+auto tCurrentURLOpensInThisTab =
+    test("Palette/the current URL as text puts Open <url> in this tab first") = []
+{
+    auto tabs = someTabs();
+    tabs[0].isCurrent = true;
+    auto ranked = rank(listPaletteRows(tabs, {}, lastUsedFrom({})), {}, "https://github.com");
+
+    check(ranked.front().kind == GoKind::typedURL);
+    check(ranked.front().title == "Open https://github.com in this tab");
+    check(ranked.back().isCurrent);
+};
+
+auto tTypedURLTitleFollowsMode =
+    test("Palette/new-tab mode titles the typed URL row Open <url>") = []
+{
+    auto ranked = rankPalette({}, {}, "example.com", newTab);
+
+    check(ranked.front().title == "Open example.com");
+};
+
+auto tEmptyQueryKeepsTheRows =
+    test("Palette/an empty query returns the rows untouched") = []
+{
+    auto rows = someRows();
+    check(rank(rows, {}, "").size() == rows.size());
+};
+
+auto tStrongHitFirstSearchSecond =
+    test("Palette/a strong hit comes first with search second") = []
+{
+    auto ranked = rank(someRows(), {}, "github");
 
     check(ranked.size() == 2);
-    check(ranked.front().url == "https://github.com");
-    check(ranked.back().isSearch);
+    check(ranked[0].url == "https://github.com");
+    check(ranked[1].kind == GoKind::search);
+};
+
+auto tWeakHitPutsSearchFirst =
+    test("Palette/a weak hit puts search first") = []
+{
+    auto ranked = rank({makeTabRow(0, "Linear issues", "https://linear.app")}, {}, "lnir");
+
+    check(ranked.front().kind == GoKind::search);
 };
 
 auto tNoMatchLeavesOnlySearch =
     test("Palette/nothing matching leaves just the search row") = []
 {
-    auto all = mergePaletteItems(someTabs(), somePlaces(), lastUsedFrom({}));
-    auto ranked = rankPalette(all, {}, "zzzzqqqq");
+    auto ranked = rank(someRows(), {}, "zzzzqqqq");
 
     check(ranked.size() == 1);
-    check(ranked.front().isSearch);
+    check(ranked.front().kind == GoKind::search);
 };
 
 auto tHistoryJoinsTheHunt = test("Palette/history rows join query results") = []
@@ -106,12 +190,11 @@ auto tHistoryJoinsTheHunt = test("Palette/history rows join query results") = []
     auto history = std::vector<HistoryEntry> {
         {"https://webkit.org/blog", "WebKit Blog", 100, 3}};
 
-    auto all = mergePaletteItems(someTabs(), somePlaces(), lastUsedFrom({}));
-    auto ranked = rankPalette(all, history, "webkit");
+    auto ranked = rank(someRows(), history, "webkit");
 
     check(ranked.size() == 2);
     check(ranked.front().url == "https://webkit.org/blog");
-    check(ranked.front().tabId == -1);
+    check(ranked.front().kind == GoKind::history);
 };
 
 auto tHistoryNeverDuplicatesOpenRows =
@@ -120,27 +203,26 @@ auto tHistoryNeverDuplicatesOpenRows =
     auto history =
         std::vector<HistoryEntry> {{"https://github.com/", "GitHub", 100, 5}};
 
-    auto all = mergePaletteItems(someTabs(), somePlaces(), lastUsedFrom({}));
-    auto ranked = rankPalette(all, history, "github");
+    auto ranked = rank(someRows(), history, "github");
 
-    check(ranked.size() == 2); // the open tab + the search row
+    check(ranked.size() == 2);
     check(ranked.front().tabId == 0);
 };
 
-auto tSearchRowStyle = test("Palette/the search row mirrors the query kind") = []
+auto tSearchRowTitle = test("Palette/the search row says what it searches for") = []
 {
-    check(searchRow("github.com").title == "Open github.com");
-    check(searchRow("hello world").title.find("Search Google") != std::string::npos);
+    auto ranked = rank({}, {}, "hello world");
+
+    check(ranked.front().title == "Search Google for “hello world”");
 };
 
 auto tURLQueryWithoutExactMatchOpensTheURL =
     test("Palette/a URL query beats fuzzy hits when nothing matches exactly") = []
 {
-    auto all =
-        std::vector<GoItem> {{0, "Inbox - Tamber Mail", "https://mail.google.com/"}};
-    auto ranked = rankPalette(all, {}, "google.com");
+    auto ranked =
+        rank({makeTabRow(0, "Inbox - Tamber Mail", "https://mail.google.com/")}, {}, "google.com");
 
-    check(ranked.front().isSearch);
+    check(ranked.front().kind == GoKind::typedURL);
     check(ranked.front().url == "https://google.com");
     check(ranked.back().url == "https://mail.google.com/");
 };
@@ -148,46 +230,42 @@ auto tURLQueryWithoutExactMatchOpensTheURL =
 auto tDeadPagesSinkBelowSearch =
     test("Palette/a dead page never outranks the search row") = []
 {
-    auto deadTab = GoItem {};
-    deadTab.tabId = 0;
-    deadTab.title = "Can't reach this page";
-    deadTab.url = "https://hackernews.com/";
+    auto deadTab = makeTab(0, "Can't reach this page", "https://hackernews.com/");
     deadTab.failed = true;
 
-    auto ranked = rankPalette({deadTab}, {}, "hacker news");
+    auto ranked = rank(listPaletteRows({deadTab}, {}, lastUsedFrom({})), {}, "hacker news");
 
     check(ranked.size() == 2);
-    check(ranked.front().isSearch);
+    check(ranked.front().kind == GoKind::search);
     check(ranked.back().failed);
 };
 
 auto tURLQueryPrefersTheExactItem =
-    test("Palette/a URL query's exact match replaces the search row") = []
+    test("Palette/a URL query's exact match replaces the Open row") = []
 {
-    auto all = mergePaletteItems(someTabs(), somePlaces(), lastUsedFrom({}));
-    auto ranked = rankPalette(all, {}, "github.com");
+    auto ranked = rank(someRows(), {}, "github.com");
 
     check(ranked.front().tabId == 0);
 
-    for (auto& item: ranked)
-        check(!item.isSearch);
+    for (auto& row: ranked)
+        check(row.kind != GoKind::typedURL && row.kind != GoKind::search);
 };
 
 auto tCompletionTakesTheRowsURL =
     test("Palette/Tab takes a row's URL, or the search row's query") = []
 {
-    check(completionText({0, "GitHub", "https://github.com"}, "git")
+    check(completionText(makeTabRow(0, "GitHub", "https://github.com"), "git")
           == "https://github.com");
-    check(completionText(searchRow("hello world"), "hello world") == "hello world");
+    check(completionText(rank({}, {}, "hello world").front(), "hello world")
+          == "hello world");
 };
 
 auto tEditedURLOpensWhatsTyped =
     test("Palette/an edited row URL opens as typed, not the old row") = []
 {
-    auto all = mergePaletteItems(someTabs(), somePlaces(), lastUsedFrom({}));
-    auto ranked = rankPalette(all, {}, "https://github.com/jamierpond/Grazer");
+    auto ranked = rank(someRows(), {}, "https://github.com/jamierpond/Grazer");
 
-    check(ranked.front().isSearch);
+    check(ranked.front().kind == GoKind::typedURL);
     check(ranked.front().url == "https://github.com/jamierpond/Grazer");
 };
 
@@ -200,10 +278,44 @@ auto tSearchRowNeverDuplicated =
                                     100,
                                     1}};
 
-    auto ranked = rankPalette({}, history, "hacker news");
+    auto ranked = rank({}, history, "hacker news");
 
     check(ranked.size() == 1);
-    check(ranked.front().isSearch);
+    check(ranked.front().kind == GoKind::search);
+};
+
+auto tRowKinds = test("Palette/each row says what it is and what ✕ and ★ do") = []
+{
+    auto history = std::vector<HistoryEntry> {{"https://webkit.org", "WebKit", 1, 1}};
+    auto ranked = rank(someRows(), history, "i");
+
+    for (auto& row: ranked)
+    {
+        if (row.kind == GoKind::tab)
+            check(row.canClose && row.canStar);
+
+        if (row.kind == GoKind::place)
+            check(!row.canClose && row.canStar && row.bookmarked);
+
+        if (row.kind == GoKind::history)
+            check(row.canClose && row.canStar);
+
+        if (row.kind == GoKind::search || row.kind == GoKind::typedURL)
+            check(!row.canClose && !row.canStar);
+    }
+};
+
+auto tOpeningFollowsTheMode =
+    test("Palette/a tab row switches, other rows load here or in a new tab by mode and ⌘") = []
+{
+    auto tab = makeTabRow(0, "GitHub", "https://github.com");
+    auto place = someRows()[2];
+
+    check(decidePaletteOpening(tab, goFromHere, false) == PaletteOpening::switchToTab);
+    check(decidePaletteOpening(tab, newTab, true) == PaletteOpening::switchToTab);
+    check(decidePaletteOpening(place, goFromHere, false) == PaletteOpening::loadInThisTab);
+    check(decidePaletteOpening(place, goFromHere, true) == PaletteOpening::openInNewTab);
+    check(decidePaletteOpening(place, newTab, false) == PaletteOpening::openInNewTab);
 };
 
 namespace
@@ -235,26 +347,25 @@ auto tScatteredLettersAreNoHit =
     test("Palette/a query only scattered through long URLs shows just the search row") = []
 {
     auto ranked =
-        rankPalette({}, someGoogleSignInHistory(), "leopard eating faces party");
+        rank({}, someGoogleSignInHistory(), "leopard eating faces party");
 
     check(ranked.size() == 1);
-    check(ranked.front().isSearch);
+    check(ranked.front().kind == GoKind::search);
 };
 
 auto tRealQueryStillHitsLongURLs =
-    test("Palette/a real query still lists rows with long URLs above search") = []
+    test("Palette/a real query still lists rows with long URLs") = []
 {
-    auto ranked = rankPalette({}, someGoogleSignInHistory(), "sign in google");
+    auto ranked = rank({}, someGoogleSignInHistory(), "sign in google");
 
     check(ranked.size() == 4);
-    check(!ranked.front().isSearch);
-    check(ranked.back().isSearch);
+    check(ranked.front().kind == GoKind::history);
 };
 
 auto tShortQueryHitsShortTitle =
     test("Palette/a short query still hits a short title") = []
 {
-    auto ranked = rankPalette(someTabs(), {}, "git");
+    auto ranked = rank(someRows(), {}, "git");
 
     check(ranked.front().title == "GitHub");
 };
@@ -284,7 +395,7 @@ auto tGmailHistoryHits = test("Palette/gmail finds both Gmail inboxes, the one t
          4},
         {"https://mail.google.com/mail/u/1/#inbox", "Inbox - Gmail", 90, 2}};
 
-    auto ranked = rankPalette({}, history, "gmail");
+    auto ranked = rank({}, history, "gmail");
 
     check(ranked.size() == 3);
     check(ranked.front().url == "https://mail.google.com/mail/u/1/#inbox");
@@ -296,7 +407,7 @@ auto tGithubTitleHits =
     auto history = std::vector<HistoryEntry> {
         {"https://github.com/login", "Sign in to GitHub · GitHub", 100, 1}};
 
-    auto ranked = rankPalette({}, history, "github");
+    auto ranked = rank({}, history, "github");
 
     check(ranked.size() == 2);
     check(ranked.front().url == "https://github.com/login");
@@ -309,8 +420,8 @@ auto tEmptyQueryShowsNoHistory =
         {"https://old.example.com", "Old", 100, 1},
         {"https://new.example.com", "New", 300, 1}};
 
-    auto all = mergePaletteItems(someTabs(), somePlaces(), lastUsedFrom({}));
-    auto ranked = rankPalette(all, history, "");
+    auto all = someRows();
+    auto ranked = rank(all, history, "");
 
     check(ranked.size() == all.size());
 
@@ -322,10 +433,9 @@ auto tHitsAreCapped = test("Palette/a query lists at most 50 hits plus search") 
 {
     constexpr auto historySize = 200;
     constexpr auto maxHitRowsPlusSearch = 51;
-    auto ranked = rankPalette({}, someClaudeHistory(historySize), "claude");
+    auto ranked = rank({}, someClaudeHistory(historySize), "claude");
 
     check(ranked.size() == maxHitRowsPlusSearch);
-    check(ranked.back().isSearch);
 };
 
 auto tDuplicateHistoryListedOnce =
@@ -335,7 +445,7 @@ auto tDuplicateHistoryListedOnce =
         {"https://webkit.org/blog", "WebKit Blog", 100, 3},
         {"https://www.webkit.org/blog/", "WebKit Blog", 90, 1}};
 
-    auto ranked = rankPalette({}, history, "webkit");
+    auto ranked = rank({}, history, "webkit");
 
     check(ranked.size() == 2);
 };
@@ -343,11 +453,31 @@ auto tDuplicateHistoryListedOnce =
 auto tOpenPageHidesItsFragmentHistory =
     test("Palette/an open tab hides history rows for the same page at another #fragment") = []
 {
-    auto tabs = std::vector<GoItem> {{0, "PR", "https://github.com/o/r/pull/1/files"}};
+    auto tabs = std::vector<GoItem> {makeTabRow(0, "PR files", "https://github.com/o/r/pull/1/files")};
     auto history = std::vector<HistoryEntry> {
-        {"https://github.com/o/r/pull/1/files#diff-aaa", "PR", 1000, 1}};
+        {"https://github.com/o/r/pull/1/files#diff-aaa", "PR files", 1000, 1}};
 
-    auto ranked = rankPalette(tabs, history, "");
+    auto ranked = rank(tabs, history, "pr files");
 
-    check(ranked.size() == 1);
+    check(ranked.size() == 2);
+    check(ranked.front().kind == GoKind::tab);
+};
+
+auto tCtrlWClosesOnlyTabRows =
+    test("Palette/ctrl-w closes open tab rows only") = []
+{
+    auto rows = someRows();
+
+    check(canCloseWithCtrlW(rows[0]));
+    check(!canCloseWithCtrlW(rows[2]));
+    check(!canCloseWithCtrlW(rank({}, {}, "hello").front()));
+};
+
+auto tHighlightMovesToTheNextRow =
+    test("Palette/closing the highlighted row highlights the next one") = []
+{
+    check(keepSelectionInRange(1, 3) == 1);
+    check(keepSelectionInRange(2, 2) == 1);
+    check(keepSelectionInRange(-1, 3) == -1);
+    check(keepSelectionInRange(0, 0) == -1);
 };
