@@ -409,7 +409,8 @@ auto tGithubTitleHits =
     auto ranked = rank({}, history, "github");
 
     check(ranked.size() == 2);
-    check(ranked[1].url == "https://github.com/login");
+    check(ranked[0].url == "https://github.com/login");
+    check(ranked[1].kind == GoKind::search);
 };
 
 auto tEmptyQueryShowsNoHistory =
