@@ -102,8 +102,18 @@ bool isUtf8ContinuationByte(char c)
     return ((unsigned char) c & 0xC0) == 0x80;
 }
 
+// The first UTF-8 character boundary at or after `length`.
+std::size_t findCharacterStart(std::string_view text, std::size_t length)
+{
+    while (length < text.size() && isUtf8ContinuationByte(text[length]))
+        ++length;
+
+    return length;
+}
+
 // `text` cut to fit `width` in the painter's current font, with "…" after it
-// when it was cut. Cuts land between UTF-8 characters.
+// when it was cut. Cuts land between UTF-8 characters. Binary search: each
+// measurement shapes the whole prefix, so trying every length was quadratic.
 std::string fitTextToWidth(UI::Graphics& g, std::string_view text, float width)
 {
     if (g.measureText(text) <= width)
@@ -111,19 +121,28 @@ std::string fitTextToWidth(UI::Graphics& g, std::string_view text, float width)
 
     static constexpr auto ellipsis = std::string_view {"…"};
     auto available = width - g.measureText(ellipsis);
-    auto length = text.size();
+    auto fitting = std::size_t {0};
+    auto tooLong = text.size();
 
-    while (length > 0)
+    while (tooLong - fitting > 1)
     {
-        do
-            --length;
-        while (length > 0 && isUtf8ContinuationByte(text[length]));
+        auto halfway = fitting + (tooLong - fitting) / 2;
+        auto middle = findCharacterStart(text, halfway);
 
-        if (g.measureText(text.substr(0, length)) <= available)
-            break;
+        // No character starts in [halfway, tooLong): look below halfway.
+        if (middle >= tooLong)
+        {
+            tooLong = halfway;
+            continue;
+        }
+
+        if (g.measureText(text.substr(0, middle)) <= available)
+            fitting = middle;
+        else
+            tooLong = middle;
     }
 
-    return std::string {text.substr(0, length)} + std::string {ellipsis};
+    return std::string {text.substr(0, fitting)} + std::string {ellipsis};
 }
 
 Color fadeIfFailed(Color colour, const GoItem& row)
@@ -219,6 +238,7 @@ PaletteRows::PaletteRows()
 void PaletteRows::setRows(const std::vector<GoItem>& newRows, int newHighlighted)
 {
     rows = newRows;
+    fittedTexts.assign(rows.size(), std::nullopt);
     highlighted = newHighlighted;
     scrollToHighlightedRow();
     repaint();
@@ -280,12 +300,13 @@ void PaletteRows::paint(UI::Graphics& g)
         if (y + rowHeight < 0.f || y > getHeight())
             continue;
 
-        paintRow(g, rows[(std::size_t) index], {0.f, y, width, rowHeight}, index == highlighted);
+        paintRow(g, (std::size_t) index, {0.f, y, width, rowHeight}, index == highlighted);
     }
 }
 
-void PaletteRows::paintRow(UI::Graphics& g, const GoItem& row, Rect area, bool isHighlighted)
+void PaletteRows::paintRow(UI::Graphics& g, std::size_t index, Rect area, bool isHighlighted)
 {
+    auto& row = rows[index];
     if (isHighlighted)
     {
         g.setColour(highlightColour);
@@ -308,7 +329,7 @@ void PaletteRows::paintRow(UI::Graphics& g, const GoItem& row, Rect area, bool i
     g.drawText(marker.label, content.removeFromRight(g.measureText(marker.label)), UI::Justification::Right);
     content.removeFromRight(kindLabelGap);
 
-    paintRowText(g, row, content);
+    paintRowText(g, index, content);
 }
 
 void PaletteRows::paintRowButtons(UI::Graphics& g, const GoItem& row, Rect area)
@@ -329,24 +350,53 @@ void PaletteRows::paintRowButtons(UI::Graphics& g, const GoItem& row, Rect area)
 }
 
 // Title over a grey URL; an action row (search, open a typed URL) is one line.
-void PaletteRows::paintRowText(UI::Graphics& g, const GoItem& row, Rect content)
+void PaletteRows::resized()
 {
+    fittedTexts.assign(rows.size(), std::nullopt);
+}
+
+// Fitting measures text, which shapes it; done once per row until the rows or the width change.
+const FittedRowText& PaletteRows::getFittedRowText(UI::Graphics& g, std::size_t index, float width)
+{
+    auto& fitted = fittedTexts[index];
+
+    if (fitted)
+        return *fitted;
+
+    auto& row = rows[index];
     auto title = row.title.empty() ? row.url : row.title;
+    fitted = FittedRowText {};
+    g.setFontSize(titleFontSize);
+    fitted->title = fitTextToWidth(g, title, width);
+
+    if (!isActionRow(row))
+    {
+        g.setFontSize(detailFontSize);
+        fitted->url = fitTextToWidth(g, row.url, width);
+    }
+
+    return *fitted;
+}
+
+void PaletteRows::paintRowText(UI::Graphics& g, std::size_t index, Rect content)
+{
+    auto& row = rows[index];
+    auto& fitted = getFittedRowText(g, index, content.w);
     g.setFontSize(titleFontSize);
 
     if (isActionRow(row))
     {
         g.setColour(actionTextColour);
-        g.drawText(fitTextToWidth(g, title, content.w), content);
+        g.drawText(fitted.title, content);
         return;
     }
 
     g.setColour(fadeIfFailed(textColour, row));
-    g.drawText(fitTextToWidth(g, title, content.w), content.withHeight(rowHeight * titleShare));
+    g.drawText(fitted.title, content.withHeight(rowHeight * titleShare));
 
     g.setFontSize(detailFontSize);
     g.setColour(fadeIfFailed(dimTextColour, row));
-    g.drawText(fitTextToWidth(g, row.url, content.w),
+    g.drawText(fitted.url,
                content.withY(content.y + rowHeight * titleShare - urlRaise).withHeight(rowHeight * urlShare));
 }
 

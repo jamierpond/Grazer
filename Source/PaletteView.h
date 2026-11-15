@@ -27,6 +27,13 @@ enum class PaletteKeyAction
 // and ★ / ✕ on the right. Painted by hand, the way Rudder's ResultsList is, so
 // a row is exactly the shape the palette wants and only the list repaints when
 // the highlight moves.
+// A row's title and URL, already cut to the row's width.
+struct FittedRowText
+{
+    std::string title;
+    std::string url;
+};
+
 class PaletteRows final : public eacp::UI::Component
 {
 public:
@@ -36,6 +43,7 @@ public:
     float getContentHeight() const;
 
     void paint(eacp::UI::Graphics& g) override;
+    void resized() override;
     void mouseDown(const eacp::UI::MouseEvent& event) override;
     bool mouseWheelMove(const eacp::UI::MouseEvent& event) override;
 
@@ -49,11 +57,13 @@ private:
     void scrollToHighlightedRow();
     float getMaximumScroll() const;
     int findRowAt(float y) const;
-    void paintRow(eacp::UI::Graphics& g, const GoItem& row, eacp::Graphics::Rect area, bool isHighlighted);
+    void paintRow(eacp::UI::Graphics& g, std::size_t index, eacp::Graphics::Rect area, bool isHighlighted);
     void paintRowButtons(eacp::UI::Graphics& g, const GoItem& row, eacp::Graphics::Rect area);
-    void paintRowText(eacp::UI::Graphics& g, const GoItem& row, eacp::Graphics::Rect content);
+    void paintRowText(eacp::UI::Graphics& g, std::size_t index, eacp::Graphics::Rect content);
+    const FittedRowText& getFittedRowText(eacp::UI::Graphics& g, std::size_t index, float width);
 
     std::vector<GoItem> rows;
+    std::vector<std::optional<FittedRowText>> fittedTexts;
     int highlighted = -1;
     float scroll = 0.f;
 };
