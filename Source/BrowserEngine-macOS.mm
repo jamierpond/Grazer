@@ -20,7 +20,7 @@ void configure(eacp::Graphics::WebView::Options& options)
     options.applicationNameForUserAgent = "Version/26.0 Safari/605.1.15";
 
     options.backForwardGestures = true;
-    options.allowsMagnification = true;
+    options.pinchToZoom = true;
     options.elementFullscreen = true;
 }
 
