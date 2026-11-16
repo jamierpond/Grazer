@@ -37,15 +37,60 @@ auto tBareWordIsNotURL = test("Url/a bare word is a search") = []
 };
 
 auto tWithSchemeAddsHttps =
-    test("Url/withScheme adds https:// only when missing") = []
+    test("Url/withScheme adds https:// when missing, http:// for local hosts") = []
 {
     check(withScheme("github.com") == "https://github.com");
     check(withScheme("http://github.com") == "http://github.com");
+    check(withScheme("localhost:3000") == "http://localhost:3000");
+    check(withScheme("localhost") == "http://localhost");
+    check(withScheme("app.localhost:5173/x") == "http://app.localhost:5173/x");
+    check(withScheme("192.168.1.20:8080") == "http://192.168.1.20:8080");
+    check(withScheme("127.0.0.1/admin") == "http://127.0.0.1/admin");
+    check(withScheme("https://localhost:3000") == "https://localhost:3000");
+};
+
+auto tLocalDevelopmentHost =
+    test("Url/isLocalDevelopmentHost is localhost or an IPv4 address") = []
+{
+    check(isLocalDevelopmentHost("localhost"));
+    check(isLocalDevelopmentHost("LocalHost"));
+    check(isLocalDevelopmentHost("api.localhost"));
+    check(isLocalDevelopmentHost("10.0.0.1"));
+    check(isLocalDevelopmentHost("255.255.255.255"));
+    check(!isLocalDevelopmentHost("localhost.com"));
+    check(!isLocalDevelopmentHost("mylocalhost"));
+    check(!isLocalDevelopmentHost("256.1.1.1"));
+    check(!isLocalDevelopmentHost("1.2.3"));
+    check(!isLocalDevelopmentHost("1.2.3.4.5"));
+    check(!isLocalDevelopmentHost("1..3.4"));
+    check(!isLocalDevelopmentHost("1234.1.1.1"));
+    check(!isLocalDevelopmentHost("github.com"));
+    check(!isLocalDevelopmentHost(""));
+};
+
+auto tHostOfTypedAddress = test("Url/getHostOfTypedAddress stops at port, path or query") = []
+{
+    check(getHostOfTypedAddress("localhost:3000/app") == "localhost");
+    check(getHostOfTypedAddress("10.0.0.1/x") == "10.0.0.1");
+    check(getHostOfTypedAddress("github.com?q=1") == "github.com");
+    check(getHostOfTypedAddress("github.com") == "github.com");
+};
+
+auto tPlainHttp = test("Url/isPlainHttpURL is true only for http://") = []
+{
+    check(isPlainHttpURL("http://neverssl.com/"));
+    check(isPlainHttpURL("HTTP://example.com"));
+    check(isPlainHttpURL("http://localhost:3000"));
+    check(!isPlainHttpURL("https://github.com"));
+    check(!isPlainHttpURL("grazer://home"));
+    check(!isPlainHttpURL("http:"));
+    check(!isPlainHttpURL(""));
 };
 
 auto tNavigationURL = test("Url/navigationURL loads URLs and searches prose") = []
 {
     check(navigationURL("github.com") == "https://github.com");
+    check(navigationURL("localhost:3000") == "http://localhost:3000");
     check(navigationURL("hello world")
           == "https://www.google.com/search?q=hello+world");
 };

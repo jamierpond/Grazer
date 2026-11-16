@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <string_view>
 
 namespace grazer
 {
@@ -41,7 +42,99 @@ std::string withScheme(const std::string& url)
     if (url.find("://") != std::string::npos)
         return url;
 
+    if (isLocalDevelopmentHost(getHostOfTypedAddress(url)))
+        return "http://" + url;
+
     return "https://" + url;
+}
+
+std::string getHostOfTypedAddress(const std::string& text)
+{
+    return text.substr(0, text.find_first_of(":/?#"));
+}
+
+static char toLowerCase(char c)
+{
+    auto asUnsigned = static_cast<unsigned char>(c);
+    auto lowered = std::tolower(asUnsigned);
+    return static_cast<char>(lowered);
+}
+
+static bool isDigit(char c)
+{
+    auto asUnsigned = static_cast<unsigned char>(c);
+    return std::isdigit(asUnsigned) != 0;
+}
+
+static bool isDecimalByte(std::string_view part)
+{
+    constexpr auto maximumDigits = std::size_t {3};
+    constexpr auto maximumByte = 255;
+    constexpr auto decimalBase = 10;
+
+    if (part.empty() || part.size() > maximumDigits)
+        return false;
+
+    auto value = 0;
+
+    for (auto c: part)
+    {
+        if (!isDigit(c))
+            return false;
+
+        value = value * decimalBase + (c - '0');
+    }
+
+    return value <= maximumByte;
+}
+
+static bool isIPv4Address(std::string_view host)
+{
+    constexpr auto partCount = 4;
+
+    for (auto part = 0; part < partCount; ++part)
+    {
+        auto dot = host.find('.');
+        auto isLastPart = part == partCount - 1;
+
+        if (isLastPart != (dot == std::string_view::npos))
+            return false;
+
+        if (!isDecimalByte(host.substr(0, dot)))
+            return false;
+
+        if (!isLastPart)
+            host.remove_prefix(dot + 1);
+    }
+
+    return true;
+}
+
+bool isLocalDevelopmentHost(const std::string& host)
+{
+    auto lowered = std::string {};
+
+    for (auto c: host)
+        lowered += toLowerCase(c);
+
+    return lowered == "localhost" || lowered.ends_with(".localhost")
+           || isIPv4Address(lowered);
+}
+
+bool isPlainHttpURL(const std::string& url)
+{
+    constexpr auto plainScheme = std::string_view {"http://"};
+
+    if (url.size() < plainScheme.size())
+        return false;
+
+    for (std::size_t i = 0; i < plainScheme.size(); ++i)
+    {
+        if (toLowerCase(url[i]) != plainScheme[i])
+            return false;
+    }
+
+    return true;
 }
 
 std::string urlEncode(const std::string& text)

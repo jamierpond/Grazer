@@ -18,8 +18,19 @@ std::string navigationURL(const std::string& text);
 // ("news.ycombinator.com"), or is localhost (with optional port/path).
 bool looksLikeURL(const std::string& text);
 
-// Adds https:// when no scheme is present.
+// Adds a scheme when none is present: http:// for a local development host,
+// https:// for anything else.
 std::string withScheme(const std::string& url);
+
+// The host part of typed text with no scheme: "localhost:3000/app" -> "localhost".
+std::string getHostOfTypedAddress(const std::string& text);
+
+// localhost, anything under .localhost, or an IPv4 address such as 192.168.1.20:
+// dev servers that usually speak only plain http.
+bool isLocalDevelopmentHost(const std::string& host);
+
+// A page loaded over plain, unencrypted http.
+bool isPlainHttpURL(const std::string& url);
 
 // Percent-encodes a search query for use in a URL query parameter.
 std::string urlEncode(const std::string& text);
