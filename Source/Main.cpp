@@ -36,7 +36,7 @@
 #include <SessionLog/SessionLog.h>
 
 #if EACP_CRASH_REPORTING
-#include "GrazerVersion.h"
+#include <PondVersion.h>
 #include <eacp/CrashReporting/CrashReporting.h>
 #include <eacp/CrashReporting/Faults/Faults.h>
 #endif
@@ -2259,7 +2259,7 @@ int runBrowser(int argc, char* argv[])
 
 #if EACP_CRASH_REPORTING
     auto crashReportingOptions = CrashReporting::Options {};
-    crashReportingOptions.release = grazer::versionTag();
+    crashReportingOptions.release = pond::getVersionString();
     CrashReporting::start(crashReportingOptions);
     crashIfAskedToForTesting(argc, argv);
 #endif

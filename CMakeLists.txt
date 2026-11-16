@@ -91,19 +91,6 @@ target_link_libraries(GrazerBrowser PUBLIC emberstore FrecencySearch SearchKeys 
 set(EACP_MACOS_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/macOSBundleInfo.plist.in"
         CACHE INTERNAL "eacp macOS bundle Info.plist template")
 
-# Stamp the git SHA into a generated header on every build, so each crash
-# report says which commit Grazer was built from.
-set(GRAZER_VERSION_HEADER ${PROJECT_BINARY_DIR}/generated/GrazerVersion.h)
-add_custom_target(GrazerVersion
-        BYPRODUCTS ${GRAZER_VERSION_HEADER}
-        COMMAND ${CMAKE_COMMAND}
-                -DSRC=${CMAKE_SOURCE_DIR}
-                -DIN=${CMAKE_SOURCE_DIR}/Source/Version.h.in
-                -DOUT=${GRAZER_VERSION_HEADER}
-                -DGRAZER_PROJECT_VERSION=${PROJECT_VERSION}
-                -P ${CMAKE_SOURCE_DIR}/cmake/GitVersion.cmake
-        COMMENT "Stamping git version")
-
 add_executable(Grazer Source/Main.cpp Source/LoadingBackdrop.cpp Source/PaletteView.cpp)
 
 # eacp's Text/Font.h ends an `if constexpr` chain with a return MSVC calls
@@ -163,8 +150,9 @@ grazer_enable_passkeys(Grazer audio.pond.grazer)
 
 target_link_libraries(Grazer PRIVATE PondApp RudderClient)
 
-add_dependencies(Grazer GrazerVersion)
-target_include_directories(Grazer PRIVATE ${PROJECT_BINARY_DIR}/generated)
+# Each crash report says which version and commit Grazer was built from.
+pond_add_version_library(GrazerVersion)
+target_link_libraries(Grazer PRIVATE GrazerVersion)
 
 if (APPLE OR WIN32)
     eacp_enable_crash_reporting(Grazer SYMBOLS_DIR ${PROJECT_BINARY_DIR}/symbols)
