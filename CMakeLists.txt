@@ -11,17 +11,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# eacp's `grazer` branch is develop with the open PRs Grazer needs merged in:
-# #146 (browser options), #147 (downloads, external links), #148 (camera/mic
-# prompt), #141 (keys reach the focused view), #143
-# (GlobalHotKey::isAvailable) and #152 (WebView::focused is the one with
-# focus). Move back to develop once they merge. Work
-# against a local eacp checkout with:
+# eacp jp/develop: develop plus Jamie's unmerged fixes, one commit each.
+# Grazer needs #143 (GlobalHotKey::isAvailable), #146 (browser options) and
+# #152 (WebView::focused is the one with focus). Move back to develop once
+# they merge. Work against a local eacp checkout with:
 #   cmake -B build -DLOCKSTEP_eacp_SOURCE=$HOME/projects/eacp
 lockstep_add_package(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
-        GIT_TAG grazer
+        GIT_TAG jp/develop
         SYSTEM YES)
 
 # Local persistence (Firestore-flavoured JSON documents). Must come after

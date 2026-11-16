@@ -58,12 +58,11 @@ On Windows, `just install` also adds Desktop and Start Menu shortcuts and
 registers Grazer as a browser; pick it under Settings > Default apps.
 
 Grazer builds against [eacp](https://github.com/eyalamirmusic/eacp)'s
-`grazer` branch: `develop` plus the open PRs Grazer needs (listed in
-CMakeLists.txt). On macOS, some WebView
-APIs Grazer uses haven't landed in eacp yet; build against a local checkout
-with `-DLOCKSTEP_eacp_SOURCE=$HOME/path/to/eacp`.
+`jp/develop` branch: `develop` plus Jamie's open PRs, the ones Grazer needs
+listed in CMakeLists.txt. Build against a local checkout with
+`-DLOCKSTEP_eacp_SOURCE=$HOME/path/to/eacp`.
 
-Dependencies are pinned in `lockstep.lock`. Branch-pinned ones (eacp@grazer,
+Dependencies are pinned in `lockstep.lock`. Branch-pinned ones (eacp@jp/develop,
 Rudder@main, emberstore@main) stay at the locked commit until
 `just update-deps` (or `lockstep update <Name>`) moves them; commit the
 rewritten lock.

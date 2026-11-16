@@ -32,7 +32,7 @@ run:
 install *args:
     {{msvc}} node scripts/install.mjs {{args}}
 
-[doc('Move branch-pinned deps (eacp@grazer, Rudder@main, ...) to their latest commits in lockstep.lock; builds nothing')]
+[doc('Move branch-pinned deps (eacp@jp/develop, Rudder@main, ...) to their latest commits in lockstep.lock; builds nothing')]
 update-deps:
     {{msvc}} node scripts/update-deps.mjs
 
