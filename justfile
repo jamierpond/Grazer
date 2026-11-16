@@ -18,6 +18,12 @@ build:
 test:
     {{msvc}} node scripts/test.mjs
 
+[doc("Build everything, then run clang-tidy (eacp's checks) over Grazer's sources; fails on any finding")]
+[unix]
+tidy: build
+    cmake --build build
+    scripts/tidy.sh build
+
 [doc('Build + launch Grazer')]
 run:
     {{msvc}} node scripts/run.mjs
