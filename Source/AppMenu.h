@@ -48,6 +48,6 @@ struct Actions
 };
 
 // Install Grazer's menu bar. Call once the window exists.
-void install(eacp::Graphics::Window& window, Actions actions);
+void install(eacp::Graphics::Window& window, const Actions& actions);
 
 } // namespace AppMenu

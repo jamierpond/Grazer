@@ -59,10 +59,11 @@ auto tToggleFallsBackToURLTitle =
     check(found);
 };
 
+// NOLINTNEXTLINE(cppcoreguidelines-interfaces-global-init): libc++ declares std::ios_base::out, the ofstream's default mode, as a static constant the check takes for an uninitialised global
 auto tImportsLegacyFile = test("Places/first run imports the legacy JSON") = []
 {
-    auto legacy =
-        std::filesystem::temp_directory_path() / "GrazerTests" / "legacy-places.json";
+    auto legacy = std::filesystem::temp_directory_path() / "GrazerTests"
+                  / "legacy-places.json";
     std::filesystem::create_directories(legacy.parent_path());
 
     {

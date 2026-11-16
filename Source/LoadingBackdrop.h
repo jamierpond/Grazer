@@ -43,7 +43,7 @@ private:
     eacp::GPU::Float calculateVignette(const eacp::GPU::Float2& screenPoint);
     eacp::GPU::Float4 readFluidCell(const eacp::GPU::Float2& cell);
     eacp::GPU::Float2
-        sampleDisplacementInCells(const eacp::GPU::Float2& screenPoint);
+        sampleDisplacementInCells(const eacp::GPU::Float2& screenPoint) const;
 };
 
 // Semi-Lagrangian advection of velocity and displacement (xy velocity in cells
@@ -77,7 +77,7 @@ struct FluidAdvectKernel final : eacp::GPU::ComputeProgram
 
 private:
     eacp::GPU::Float4 readCell(const eacp::GPU::Float2& cell);
-    eacp::GPU::Float4 sampleBilinear(const eacp::GPU::Float2& point);
+    eacp::GPU::Float4 sampleBilinear(const eacp::GPU::Float2& point) const;
     eacp::GPU::Float calculateStirFalloff(const eacp::GPU::Float2& cell);
 };
 

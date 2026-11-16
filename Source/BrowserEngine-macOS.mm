@@ -25,7 +25,7 @@ void configure(eacp::Graphics::WebView::Options& options)
 }
 
 void reportDownloads(eacp::Graphics::WebView& view,
-                     std::function<void(const std::string& message)> notify)
+                     const std::function<void(const std::string& message)>& notify)
 {
     view.onDownloadFinished = [notify](const std::string& path)
     {

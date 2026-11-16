@@ -16,7 +16,7 @@ std::string getHost(const std::string& url)
     auto normalized = normalizeURL(url);
     auto hostAndPort = normalized.substr(0, normalized.find('/'));
 
-    if (hostAndPort.starts_with("["))
+    if (hostAndPort.starts_with('['))
         return hostAndPort.substr(0, hostAndPort.find(']') + 1);
 
     return hostAndPort.substr(0, hostAndPort.find(':'));
@@ -92,7 +92,7 @@ void HistoryStore::prune()
     for (auto& id: entries.ids())
     {
         auto entry = entries.get(id);
-        aged.push_back({entry ? entry->lastVisit : 0, id});
+        aged.emplace_back(entry ? entry->lastVisit : 0, id);
     }
 
     std::sort(aged.begin(), aged.end());

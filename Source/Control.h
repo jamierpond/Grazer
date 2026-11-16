@@ -80,10 +80,10 @@ public:
         r.command(&ControlApi::reactivate, "reactivate");
     }
 
-    TabList listTabs() { return onListTabs(); }
-    Ack focusTab(const TabRef& ref) { return onFocusTab(ref.id); }
-    Ack openUrl(const UrlRef& ref) { return onOpenUrl(ref.url); }
-    Ack reactivate() { return onReactivate(); }
+    TabList listTabs() const { return onListTabs(); }
+    Ack focusTab(const TabRef& ref) const { return onFocusTab(ref.id); }
+    Ack openUrl(const UrlRef& ref) const { return onOpenUrl(ref.url); }
+    Ack reactivate() const { return onReactivate(); }
 
     std::function<TabList()> onListTabs = [] { return TabList {}; };
     std::function<Ack(std::int64_t)> onFocusTab = [](std::int64_t)

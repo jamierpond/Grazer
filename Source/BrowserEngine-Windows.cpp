@@ -12,13 +12,16 @@ void saveAttachmentsAsDownloads(eacp::Graphics::WebView&) {}
 
 void savePage(eacp::Graphics::WebView&) {}
 
-bool isPlayingAudio(eacp::Graphics::WebView&) { return false; }
+bool isPlayingAudio(eacp::Graphics::WebView&)
+{
+    return false;
+}
 
 void supplyWebCryptoMasterKeyFrom(const std::string&) {}
 
 // WebView2 runs its own download UI, with its own progress and errors.
 void reportDownloads(eacp::Graphics::WebView&,
-                     std::function<void(const std::string&)>)
+                     const std::function<void(const std::string&)>&)
 {
 }
 

@@ -18,7 +18,7 @@ void configure(eacp::Graphics::WebView::Options& options);
 // Report a tab's finished and failed downloads through `notify`, as a line
 // for the user ("Downloaded report.pdf").
 void reportDownloads(eacp::Graphics::WebView& view,
-                     std::function<void(const std::string& message)> notify);
+                     const std::function<void(const std::string& message)>& notify);
 
 // Save responses sent as "Content-Disposition: attachment" to Downloads,
 // even ones the tab could show (a PDF, an image). WebView2 does this itself.

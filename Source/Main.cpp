@@ -72,7 +72,10 @@ static void logEvent(std::string_view event,
 static void logPaletteRowEvent(std::string_view event, const GoItem& item)
 {
     logEvent(event,
-             {{"kind", item.kind}, {"tab", item.tabId}, {"title", item.title}, {"url", item.url}});
+             {{"kind", item.kind},
+              {"tab", item.tabId},
+              {"title", item.title},
+              {"url", item.url}});
 }
 
 // The page script posts "openPalette:<key>" for the vimium keys o and t.
@@ -106,7 +109,7 @@ struct Tab
     {
     }
 
-    WebView& view() { return *webView; }
+    WebView& view() const { return *webView; }
 
     std::int64_t id;
     EA::OwningPointer<WebView> webView;
@@ -134,7 +137,7 @@ struct Browser
     // Restores the last session's windows (or opens one) and starts serving
     // the control plane and Rudder.
     void start();
-    void startSessionLog();
+    void startSessionLog() const;
     void offerToBecomeDefaultBrowser();
 
     BrowserWindow& openWindow(const WindowSession& state);
@@ -158,9 +161,10 @@ struct Browser
     Control::Ack focusTabById(std::int64_t id);
     Control::Ack openUrlFromControl(const std::string& text);
 
-    emberstore::Database durable {emberstore::appDataDirectory(
-                                      "pond", snapshotMode ? "GrazerSnapshot" : "Grazer"),
-                                  emberstore::Durability::Durable};
+    emberstore::Database durable {
+        emberstore::appDataDirectory("pond",
+                                     snapshotMode ? "GrazerSnapshot" : "Grazer"),
+        emberstore::Durability::Durable};
     emberstore::Database atomic {durable.directory(),
                                  emberstore::Durability::Atomic};
     PlacesStore places {durable};
@@ -194,22 +198,21 @@ struct BrowserView final : View
     explicit BrowserView(Browser& browserToUse)
         : browser(browserToUse)
     {
-        palette.onSetQuery = [this](const std::string& text) { setPaletteQuery(text); };
+        palette.onSetQuery = [this](const std::string& text)
+        { setPaletteQuery(text); };
         palette.onMoveSelection = [this](int delta) { movePaletteSelection(delta); };
         palette.onActivate = [this](bool inNewTab)
         { Threads::callAsync([this, inNewTab] { activatePalette(inNewTab); }); };
         palette.onComplete = [this] { return completePalette(); };
         palette.onChoose = [this](const GoItem& item, bool inNewTab)
         {
-            auto chosen = item;
-            Threads::callAsync([this, chosen, inNewTab] { chooseItem(chosen, inNewTab); });
+            Threads::callAsync([this, chosen = item, inNewTab]
+                               { chooseItem(chosen, inNewTab); });
         };
-        palette.onCancel = [this] { Threads::callAsync([this] { cancelPalette(); }); };
+        palette.onCancel = [this]
+        { Threads::callAsync([this] { cancelPalette(); }); };
         palette.onCloseItem = [this](const GoItem& item)
-        {
-            auto cleared = item;
-            Threads::callAsync([this, cleared] { clearItem(cleared); });
-        };
+        { Threads::callAsync([this, cleared = item] { clearItem(cleared); }); };
         palette.onToggleBookmark = [this](const GoItem& item)
         { toggleBookmark(item.title, item.url); };
 
@@ -503,7 +506,8 @@ struct BrowserView final : View
             return;
         }
 
-        logEvent("tab.navigate.fail", {{"tab", tab.id}, {"url", tab.url}, {"error", error}});
+        logEvent("tab.navigate.fail",
+                 {{"tab", tab.id}, {"url", tab.url}, {"error", error}});
         tab.failed = true;
         history.forget(tab.url);
         tab.view().loadHTML(errorPageHTML(tab.url, error));
@@ -583,7 +587,7 @@ struct BrowserView final : View
 
     void closeActiveTab() { closeTab(activeTab, "menu-close-tab"); }
 
-    bool mustTabStayOpen(Tab& tab)
+    bool mustTabStayOpen(Tab& tab) const
     {
         return &tab == activeTab || &tab == originTab || isHomeURL(tab.url)
                || BrowserEngine::isPlayingAudio(tab.view());
@@ -641,7 +645,8 @@ struct BrowserView final : View
         if (index < 0)
             return;
 
-        logEvent("tab.close", {{"tab", tab->id}, {"reason", reason}, {"url", tab->url}});
+        logEvent("tab.close",
+                 {{"tab", tab->id}, {"reason", reason}, {"url", tab->url}});
 
         auto wasActive = tab == activeTab;
 
@@ -664,7 +669,8 @@ struct BrowserView final : View
 
         // Back to the tab the user came from, like Safari/Chrome, not whichever sits next to it.
         if (wasActive)
-            switchTo(*tabs[findMostRecentlyActivatedTab(getActivationStamps(), index)]);
+            switchTo(
+                *tabs[findMostRecentlyActivatedTab(getActivationStamps(), index)]);
 
         syncPalette();
     }
@@ -797,7 +803,8 @@ struct BrowserView final : View
         paletteQuery = text;
         refilterPalette();
         paletteSelected = findDefaultSelection(paletteFiltered);
-        logEvent("palette.query", {{"text", text}, {"rows", paletteFiltered.size()}});
+        logEvent("palette.query",
+                 {{"text", text}, {"rows", paletteFiltered.size()}});
         publishResults();
         previewDirty = true;
     }
@@ -831,8 +838,10 @@ struct BrowserView final : View
             return;
 
         auto start = std::max(paletteSelected, delta > 0 ? -1 : 0);
-        paletteSelected = std::clamp(start + delta, 0, (int) paletteFiltered.size() - 1);
-        logPaletteRowEvent("palette.highlight", paletteFiltered[(size_t) paletteSelected]);
+        paletteSelected =
+            std::clamp(start + delta, 0, (int) paletteFiltered.size() - 1);
+        logPaletteRowEvent("palette.highlight",
+                           paletteFiltered[(size_t) paletteSelected]);
         publishResults();
         previewDirty = false;
         previewSelected();
@@ -885,7 +894,8 @@ struct BrowserView final : View
             return;
         }
 
-        logPaletteRowEvent(inNewTab ? "palette.pick.cmd-enter" : "palette.pick.enter", *row);
+        logPaletteRowEvent(
+            inNewTab ? "palette.pick.cmd-enter" : "palette.pick.enter", *row);
         openItem(*row, inNewTab);
     }
 
@@ -894,7 +904,8 @@ struct BrowserView final : View
         if (!paletteOpen)
             return;
 
-        logPaletteRowEvent(inNewTab ? "palette.pick.cmd-click" : "palette.pick.click", item);
+        logPaletteRowEvent(
+            inNewTab ? "palette.pick.cmd-click" : "palette.pick.click", item);
         openItem(item, inNewTab);
     }
 
@@ -906,7 +917,8 @@ struct BrowserView final : View
 
         if (opening == PaletteOpening::switchToTab)
         {
-            logEvent("palette.result", {{"action", "switch-tab"}, {"tab", item.tabId}});
+            logEvent("palette.result",
+                     {{"action", "switch-tab"}, {"tab", item.tabId}});
 
             if (auto* tab = findTab(item.tabId))
                 switchTo(*tab);
@@ -929,7 +941,10 @@ struct BrowserView final : View
 
         if (opening == PaletteOpening::loadInThisTab || isHomeURL(startingTab->url))
         {
-            logEvent("palette.result", {{"action", "load-here"}, {"tab", startingTab->id}, {"url", item.url}});
+            logEvent("palette.result",
+                     {{"action", "load-here"},
+                      {"tab", startingTab->id},
+                      {"url", item.url}});
             navigateTabTo(*startingTab, item.url);
             return;
         }
@@ -999,7 +1014,8 @@ struct BrowserView final : View
             paletteTab.title = tab->title;
             paletteTab.url = tab->url;
             paletteTab.failed = tab->failed;
-            paletteTab.lastViewedAtMs = tab->activatedAtMs.empty() ? 0 : tab->activatedAtMs.back();
+            paletteTab.lastViewedAtMs =
+                tab->activatedAtMs.empty() ? 0 : tab->activatedAtMs.back();
             paletteTab.isCurrent = tab.get() == originTab;
             paletteTabs.push_back(std::move(paletteTab));
         }
@@ -1025,14 +1041,17 @@ struct BrowserView final : View
             return found != usages.end() ? found->second : 0.0;
         };
 
-        paletteFiltered = rankPalette(paletteAll, history.all(), {paletteQuery, paletteMode, lookUpUsage});
+        paletteFiltered = rankPalette(
+            paletteAll, history.all(), {paletteQuery, paletteMode, lookUpUsage});
 
-        paletteSelected = keepSelectionInRange(paletteSelected, paletteFiltered.size());
+        paletteSelected =
+            keepSelectionInRange(paletteSelected, paletteFiltered.size());
     }
 
     void publishResults()
     {
-        palette.setResults({paletteFiltered, paletteSelected, generation, paletteQuery});
+        palette.setResults(
+            {paletteFiltered, paletteSelected, generation, paletteQuery});
     }
 
     // --- Page commands ----------------------------------------------------------
@@ -1047,7 +1066,8 @@ struct BrowserView final : View
                 syncPalette();
         }
         else if (command.starts_with(openPaletteCommand))
-            showPalette(getPaletteModeForKey(command), getPaletteOpeningKey(command));
+            showPalette(getPaletteModeForKey(command),
+                        getPaletteOpeningKey(command));
         else if (command == "toggleBookmark")
         {
             if (activeTab != nullptr)
@@ -1069,14 +1089,14 @@ struct BrowserView final : View
     // --- Menu shortcuts ---------------------------------------------------------
 
     // The page Cmd+plus / Cmd+minus / Cmd+0 zoom.
-    WebView* activePage()
+    WebView* activePage() const
     {
         return activeTab != nullptr ? &activeTab->view() : nullptr;
     }
 
     // Cmd+R / Shift-Cmd+R. A failed tab is showing the error page loadHTML put
     // there, so it retries its URL rather than reloading that.
-    void reloadActiveTab(bool bypassCache)
+    void reloadActiveTab(bool bypassCache) const
     {
         if (activeTab == nullptr || paletteOpen)
             return;
@@ -1086,7 +1106,10 @@ struct BrowserView final : View
         if (isHomeURL(activeTab->url))
             return;
 
-        logEvent("tab.reload", {{"tab", activeTab->id}, {"from-origin", bypassCache}, {"url", activeTab->url}});
+        logEvent("tab.reload",
+                 {{"tab", activeTab->id},
+                  {"from-origin", bypassCache},
+                  {"url", activeTab->url}});
 
         if (activeTab->failed)
             view.loadURL(activeTab->url);
@@ -1099,7 +1122,7 @@ struct BrowserView final : View
     // Cmd+F / Cmd+G / Shift-Cmd+G: drive the page's find bar (see the find
     // section of PageScript.h). Opening it focuses the page first, so its
     // input really takes the keyboard.
-    void findInPage(const std::string& call)
+    void findInPage(const std::string& call) const
     {
         if (activeTab == nullptr || paletteOpen)
             return;
@@ -1298,9 +1321,10 @@ struct BrowserWindow
     Window window {windowOptions()};
 };
 
-void Browser::startSessionLog()
+void Browser::startSessionLog() const
 {
-    auto logsDirectory = (std::filesystem::path {durable.directory().str()} / "logs").string();
+    auto logsDirectory =
+        (std::filesystem::path {durable.directory().str()} / "logs").string();
     setLogFile(sessionlog::getSessionLogPath(logsDirectory, MruStore::nowMs()));
     sessionlog::deleteOldSessionLogs(logsDirectory, sessionLogsToKeep);
     logEvent("app.launch", {{"snapshot", snapshotMode}});
@@ -1370,9 +1394,8 @@ BrowserWindow& Browser::openWindow(const WindowSession& state)
 // windowWillClose), so it's only destroyed once that has unwound.
 void Browser::closeWindow(BrowserWindow& window)
 {
-    auto open = std::count_if(windows.begin(),
-                              windows.end(),
-                              [](auto& each) { return !each->closed; });
+    auto open = std::count_if(
+        windows.begin(), windows.end(), [](auto& each) { return !each->closed; });
 
     // The last window's tabs stay in the session for the next launch.
     if (open <= 1)
@@ -1663,50 +1686,62 @@ struct GrazerApp
     AppMenu::Actions getMenuActions()
     {
         return {
-            .reload = [this](bool bypassCache)
+            .reload =
+                [this](bool bypassCache)
             {
                 logEvent("menu.reload", {{"from-origin", bypassCache}});
-                runInFrontWindow([&](BrowserView& view) { view.reloadActiveTab(bypassCache); });
+                runInFrontWindow([&](BrowserView& view)
+                                 { view.reloadActiveTab(bypassCache); });
             },
-            .find = [this](const std::string& call)
+            .find =
+                [this](const std::string& call)
             {
                 logEvent("menu.find", {{"call", call}});
                 runInFrontWindow([&](BrowserView& view) { view.findInPage(call); });
             },
-            .newWindow = [this]
+            .newWindow =
+                [this]
             {
                 logEvent("menu.new-window");
                 browser.openWindow({});
             },
-            .newTab = [this]
+            .newTab =
+                [this]
             {
                 runInFrontWindow(
                     [](BrowserView& view)
                     { view.showPalette(PaletteMode::newTab, "menu-new-tab"); });
             },
-            .openLocation = [this]
+            .openLocation =
+                [this]
             {
                 runInFrontWindow(
-                    [](BrowserView& view) {
-                        view.showPalette(PaletteMode::goFromHere, "menu-open-location");
+                    [](BrowserView& view)
+                    {
+                        view.showPalette(PaletteMode::goFromHere,
+                                         "menu-open-location");
                     });
             },
-            .savePage = [this]
+            .savePage =
+                [this]
             {
                 logEvent("menu.save-page");
 
                 if (auto* page = getFrontWindowPage())
                     BrowserEngine::savePage(*page);
             },
-            .closeTab = [this]
+            .closeTab =
+                [this]
             {
                 logEvent("menu.close-tab");
                 runInFrontWindow([](BrowserView& view) { view.closeActiveTab(); });
             },
-            .closeAllTabs = [this]
+            .closeAllTabs =
+                [this]
             {
                 logEvent("menu.close-all-tabs");
-                runInFrontWindow([](BrowserView& view) { view.closeAllTabsExceptHome(); });
+                runInFrontWindow([](BrowserView& view)
+                                 { view.closeAllTabsExceptHome(); });
             },
             .activePage = [this] { return getFrontWindowPage(); }};
     }
@@ -1818,13 +1853,16 @@ struct SnapshotApp
         settledTicks = 0;
 
         for (auto& tab: view.tabs)
-            tab->view().evaluateJavaScript(snapshotRequest.script, &printScriptResult);
+            tab->view().evaluateJavaScript(snapshotRequest.script,
+                                           &printScriptResult);
     }
 
-    static void printScriptResult(const std::string& result, const std::string& error)
+    static void printScriptResult(const std::string& result,
+                                  const std::string& error)
     {
         if (!result.empty() || !error.empty())
-            std::fprintf(stderr, "grazer: --js: %s%s\n", result.c_str(), error.c_str());
+            std::fprintf(
+                stderr, "grazer: --js: %s%s\n", result.c_str(), error.c_str());
     }
 
     // eacp's window snapshot lays web content over everything else, so the
@@ -1832,22 +1870,24 @@ struct SnapshotApp
     void captureSnapshot()
     {
         capturing = true;
-        view.renderToImageAsync(snapshotScale).then(
-            [this](Image image)
-            {
-                if (!image.isValid())
+        view.renderToImageAsync(snapshotScale)
+            .then(
+                [this](Image image)
                 {
-                    std::fputs("grazer: snapshot failed\n", stderr);
-                    Apps::quit(1);
-                    return;
-                }
+                    if (!image.isValid())
+                    {
+                        std::fputs("grazer: snapshot failed\n", stderr);
+                        Apps::quit(1);
+                        return;
+                    }
 
-                if (view.paletteOpen)
-                    drawImageOver(image, view.palette.renderToImage(snapshotScale));
+                    if (view.paletteOpen)
+                        drawImageOver(image,
+                                      view.palette.renderToImage(snapshotScale));
 
-                image.save(FilePath {snapshotRequest.output});
-                Apps::quit(0);
-            });
+                    image.save(FilePath {snapshotRequest.output});
+                    Apps::quit(0);
+                });
     }
 
     // Straight-alpha "source over" of a same-sized `overlay` onto `base`.
@@ -1862,8 +1902,14 @@ struct SnapshotApp
             {
                 auto top = overlay.at(x, y);
                 auto bottom = base.at(x, y);
-                auto blend = [&](float over, float under) { return over * top.a + under * (1.f - top.a); };
-                base.set(x, y, {blend(top.r, bottom.r), blend(top.g, bottom.g), blend(top.b, bottom.b), 1.f});
+                auto blend = [&](float over, float under)
+                { return over * top.a + under * (1.f - top.a); };
+                base.set(x,
+                         y,
+                         {blend(top.r, bottom.r),
+                          blend(top.g, bottom.g),
+                          blend(top.b, bottom.b),
+                          1.f});
             }
         }
     }
@@ -1896,7 +1942,7 @@ struct ControlRequest
 {
     ControlKind kind;
     std::int64_t tabId = -1;
-    std::string url;
+    std::string url {};
 };
 
 namespace
@@ -1933,8 +1979,8 @@ void crashIfAskedToForTesting(int argc, char** argv)
     for (auto index = 1; index + 1 < argc; ++index)
     {
         if (argv[index] == crashForTestingFlag)
-            CrashReporting::Faults::triggerFault(argv[index + 1],
-                                                 CrashReporting::Faults::ThreadChoice::main);
+            CrashReporting::Faults::triggerFault(
+                argv[index + 1], CrashReporting::Faults::ThreadChoice::main);
     }
 }
 #endif
@@ -1960,7 +2006,8 @@ std::vector<std::string> getArgumentsWithoutCrashForTesting(int argc, char** arg
 
 // Recognises the control flags; returns nullopt for a plain launch. A known
 // flag missing its argument is a hard usage error rather than a silent launch.
-std::optional<ControlRequest> parseControlRequest(const std::vector<std::string>& args)
+std::optional<ControlRequest>
+    parseControlRequest(const std::vector<std::string>& args)
 {
     for (std::size_t i = 1; i < args.size(); ++i)
     {
@@ -2044,19 +2091,20 @@ struct ControlClientApp
         {
             case ControlKind::ListTabs:
                 client.call<Control::TabList>("listTabs")
-                    .then([this](Control::TabList list) { printTabs(list); },
+                    .then([this](const Control::TabList& list) { printTabs(list); },
                           [this](const std::string& error) { fail(error); });
                 break;
 
             case ControlKind::FocusTab:
-                client.call<Control::Ack>("focusTab", Control::TabRef {request.tabId})
-                    .then([this](Control::Ack ack) { reportAck(ack); },
+                client
+                    .call<Control::Ack>("focusTab", Control::TabRef {request.tabId})
+                    .then([this](const Control::Ack& ack) { reportAck(ack); },
                           [this](const std::string& error) { fail(error); });
                 break;
 
             case ControlKind::OpenUrl:
                 client.call<Control::Ack>("openUrl", Control::UrlRef {request.url})
-                    .then([this](Control::Ack ack) { reportAck(ack); },
+                    .then([this](const Control::Ack& ack) { reportAck(ack); },
                           [this](const std::string& error) { fail(error); });
                 break;
 
@@ -2068,7 +2116,7 @@ struct ControlClientApp
                 }
 
                 client.call<Control::Ack>("reactivate")
-                    .then([this](Control::Ack)
+                    .then([this](const Control::Ack&)
                           { finish(pondapp::exitCodeAnotherInstanceIsRunning); },
                           [this](const std::string&)
                           { finish(pondapp::exitCodeAnotherInstanceIsRunning); });
@@ -2085,7 +2133,7 @@ struct ControlClientApp
 
         for (auto& url: urls)
             client.call<Control::Ack>("openUrl", Control::UrlRef {url})
-                .then([this](Control::Ack) { answered(); },
+                .then([this](const Control::Ack&) { answered(); },
                       [this](const std::string&) { answered(); });
     }
 
@@ -2122,8 +2170,9 @@ struct ControlClientApp
         if (settled)
             return;
 
-        std::fprintf(stderr, "grazer: %s\n", reason.empty() ? "request failed"
-                                                         : reason.c_str());
+        std::fprintf(stderr,
+                     "grazer: %s\n",
+                     reason.empty() ? "request failed" : reason.c_str());
         finish(1);
     }
 
@@ -2239,7 +2288,8 @@ int main(int argc, char* argv[])
 
     // An explicit control flag never launches a window: talk to the running
     // instance and exit.
-    if (auto request = parseControlRequest(getArgumentsWithoutCrashForTesting(argc, argv)))
+    if (auto request =
+            parseControlRequest(getArgumentsWithoutCrashForTesting(argc, argv)))
     {
         pendingRequest = request;
         return Apps::run<ControlClientApp>();

@@ -9,6 +9,13 @@ using namespace eacp::GPU;
 
 namespace
 {
+// A uniform's shader graph value, read through the base so its CPU slot is not copied away.
+template <typename ShaderValue>
+const ShaderValue& getGraphValue(const Uniform<ShaderValue>& uniform)
+{
+    return uniform;
+}
+
 struct QuadCorner
 {
     Maths::Vec2 position;
@@ -159,9 +166,9 @@ bool isSameGridSize(const FluidGridSize& first, const FluidGridSize& second)
 GPU::Buffer makeZeroedStorageBuffer(int floatCount)
 {
     auto zeros = std::vector<float>((std::size_t) floatCount, 0.f);
-    auto bytes = (std::int64_t) (sizeof(float) * zeros.size());
-    return GPU::Buffer(
-        Device::shared(), zeros.data(), bytes, GPU::BufferUsage::Storage);
+    auto byteCount = sizeof(float) * zeros.size();
+    auto bytes = static_cast<std::int64_t>(byteCount);
+    return {Device::shared(), zeros.data(), bytes, GPU::BufferUsage::Storage};
 }
 
 Graphics::Point limitLength(Graphics::Point vector, float maximumLength)
@@ -274,12 +281,13 @@ Float4 LoadingBackdropShader::readFluidCell(const Float2& cell)
 }
 
 // The grid's row 0 is the top of the view, so screen y flips on the way in.
-Float2 LoadingBackdropShader::sampleDisplacementInCells(const Float2& screenPoint)
+Float2
+    LoadingBackdropShader::sampleDisplacementInCells(const Float2& screenPoint) const
 {
-    auto column =
-        Float(marginCells) + (screenPoint.x() * 0.5f + 0.5f) * viewColumns - 0.5f;
-    auto row =
-        Float(marginCells) + (0.5f - screenPoint.y() * 0.5f) * viewRows - 0.5f;
+    auto column = getGraphValue(marginCells)
+                  + (screenPoint.x() * 0.5f + 0.5f) * viewColumns - 0.5f;
+    auto row = getGraphValue(marginCells)
+               + (0.5f - screenPoint.y() * 0.5f) * viewRows - 0.5f;
     auto readAtOffset = [&](float columnOffset, float rowOffset)
     {
         return sampleCellsBilinear(fluidState,
@@ -318,7 +326,7 @@ void LoadingBackdropShader::define()
                           - float2(displacement.x() * 2.f / viewColumns,
                                    -displacement.y() * 2.f / viewRows);
     auto fieldPoint = displacedPoint * float2(aspect, constant(1.f)) * fieldScale;
-    auto drift = Float(time) * driftSpeed;
+    auto drift = getGraphValue(time) * driftSpeed;
 
     auto height = sampleFractalNoise(calculateWarpedPoint(fieldPoint, drift));
 
@@ -348,7 +356,7 @@ Float4 FluidAdvectKernel::readCell(const Float2& cell)
     return source.read4(calculateCellIndex(clamped.x(), clamped.y(), gridColumns));
 }
 
-Float4 FluidAdvectKernel::sampleBilinear(const Float2& point)
+Float4 FluidAdvectKernel::sampleBilinear(const Float2& point) const
 {
     return sampleCellsBilinear(source, point, gridColumns, gridRows);
 }
@@ -356,13 +364,13 @@ Float4 FluidAdvectKernel::sampleBilinear(const Float2& point)
 // A soft brush along the cursor's path this frame, so a fast flick leaves no gaps.
 Float FluidAdvectKernel::calculateStirFalloff(const Float2& cell)
 {
-    auto segment = Float2(stirTo) - stirFrom;
+    auto segment = getGraphValue(stirTo) - stirFrom;
     auto alongSegment = clamp(
         dot(cell - stirFrom, segment)
             / max(dot(segment, segment), constant(minimumSegmentLengthSquared)),
         0.f,
         1.f);
-    auto closest = Float2(stirFrom) + segment * alongSegment;
+    auto closest = getGraphValue(stirFrom) + segment * alongSegment;
     auto distanceToPath = length(cell - closest);
     return (1.f - smoothstep(0.f, stirRadiusCells, distanceToPath)) * stirStrength;
 }
@@ -378,13 +386,15 @@ void FluidAdvectKernel::define()
     auto velocityHere = float2(here.x(), here.y());
     auto sampled = sampleBilinear(cell - velocityHere * timeStep);
 
-    auto velocityDecay = exp(Float(timeStep) * -velocityDissipationPerSecond);
-    auto displacementDecay = exp(Float(timeStep) * -displacementRelaxationPerSecond);
+    auto velocityDecay =
+        exp(getGraphValue(timeStep) * -velocityDissipationPerSecond);
+    auto displacementDecay =
+        exp(getGraphValue(timeStep) * -displacementRelaxationPerSecond);
 
     auto decayedVelocity = float2(sampled.x(), sampled.y()) * velocityDecay;
     auto stirAmount = calculateStirFalloff(cell);
-    auto velocity =
-        decayedVelocity + (Float2(stirVelocity) - decayedVelocity) * stirAmount;
+    auto velocity = decayedVelocity
+                    + (getGraphValue(stirVelocity) - decayedVelocity) * stirAmount;
 
     auto drifted =
         (float2(sampled.z(), sampled.w()) + velocity * timeStep) * displacementDecay;
