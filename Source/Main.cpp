@@ -565,6 +565,7 @@ struct BrowserView final : View
         if (!paletteOpen)
             tab.view().focusContent();
 
+        updateChromeNav();
         saveSession();
         browser.scheduleRudderPush();
     }
@@ -975,11 +976,12 @@ struct BrowserView final : View
     {
         auto canBack = activeTab != nullptr && activeTab->view().canGoBack();
         auto canForward = activeTab != nullptr && activeTab->view().canGoForward();
+        auto isNotSecure = activeTab != nullptr && isPlainHttpURL(activeTab->url);
 
         chromeBar.evaluateJavaScript(
             std::string {"window.__grazerNav && window.__grazerNav("}
             + (canBack ? "true" : "false") + "," + (canForward ? "true" : "false")
-            + ")");
+            + "," + (isNotSecure ? "true" : "false") + ")");
     }
 
     // Home tabs are never rows.
@@ -1151,6 +1153,7 @@ struct BrowserView final : View
     // declares the whole bar a window-drag region.
     static constexpr auto chromeBarHtml = R"HTML(<!doctype html>
 <html><head><meta charset="utf-8"><style>
+  :root { --not-secure-colour: #ffa040; --not-secure-font-size: 12px; }
   html, body { margin: 0; height: 100%; }
   body { background: #131316; --eacp-app-region: drag;
          display: flex; align-items: center; }
@@ -1162,11 +1165,16 @@ struct BrowserView final : View
   .nav button:hover { background: #26262e; color: #fff; }
   .nav button:disabled { opacity: .3; background: transparent; }
   .nav button[hidden] { display: none; }
+  .not-secure { margin-left: 8px; color: var(--not-secure-colour);
+                font: 600 var(--not-secure-font-size) -apple-system, "Segoe UI", sans-serif;
+                white-space: nowrap; }
+  .not-secure[hidden] { display: none; }
 </style></head><body>
 <div class="nav">
   <button id="back" title="Back" disabled>&#8592;</button>
   <button id="fwd" title="Forward" hidden>&#8594;</button>
 </div>
+<span id="notSecure" class="not-secure" title="This page is loaded over plain http, unencrypted" hidden>&#9888; Not secure &middot; http</span>
 <script>
   const post = message =>
       window.webkit?.messageHandlers?.grazerChrome?.postMessage(message);
@@ -1179,9 +1187,10 @@ struct BrowserView final : View
   back.onclick = () => post('back');
   fwd.onclick = () => post('forward');
 
-  window.__grazerNav = (canBack, canForward) => {
+  window.__grazerNav = (canBack, canForward, isNotSecure) => {
       back.disabled = !canBack;
       fwd.hidden = !canForward;
+      notSecure.hidden = !isNotSecure;
   };
 </script></body></html>)HTML";
 

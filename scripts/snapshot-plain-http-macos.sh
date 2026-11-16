@@ -3,7 +3,8 @@
 # page over http on this Mac's network address, then saves Grazer --snapshot
 # PNGs of it and of http://info.cern.ch (a named public host, the kind App
 # Transport Security blocks over http) at a wide and a narrow window size, and
-# prints the server's access log.
+# prints the server's access log. Also snapshots the palette over both pages
+# and an https page, to compare the Not secure markers with an https page.
 #
 #   scripts/snapshot-plain-http-macos.sh <output-dir>
 set -euo pipefail
@@ -15,6 +16,7 @@ port=8765
 wide_size=1600x900
 narrow_size=560x900
 public_plain_http_url=http://info.cern.ch/
+https_url=https://example.com/
 
 address=$(ipconfig getifaddr en0 || ipconfig getifaddr en1)
 page_dir=$(mktemp -d)
@@ -37,7 +39,11 @@ local_url="http://$address:$port/"
 for size in "$wide_size" "$narrow_size"; do
     "$grazer" --snapshot "$output_dir/lan-$size.png" --size "$size" "$local_url"
     "$grazer" --snapshot "$output_dir/public-$size.png" --size "$size" "$public_plain_http_url"
+    "$grazer" --snapshot "$output_dir/https-$size.png" --size "$size" "$https_url"
 done
+
+"$grazer" --snapshot "$output_dir/palette-$wide_size.png" --size "$wide_size" --palette \
+    "$https_url" "$public_plain_http_url" "$local_url"
 
 echo "--- access log for $local_url"
 cat "$access_log"

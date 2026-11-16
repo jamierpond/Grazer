@@ -1,4 +1,5 @@
 #include "PaletteView.h"
+#include "Url.h"
 
 #include <SessionLog/EventLine.h>
 
@@ -28,6 +29,8 @@ const auto highlightColour = Color(0.35f, 0.51f, 1.f, 0.28f);
 const auto openTabColour = Color(0.39f, 0.83f, 0.49f, 1.f);
 const auto starColour = Color(1.f, 0.84f, 0.43f, 1.f);
 const auto failedColour = Color(0.88f, 0.39f, 0.36f, 1.f);
+// The chrome bar's --not-secure-colour (#ffa040).
+const auto notSecureColour = Color(1.f, 0.627f, 0.251f, 1.f);
 
 // A failed tab's title and URL, faded behind its red marker.
 constexpr auto failedTextOpacity = 0.55f;
@@ -153,6 +156,14 @@ Color fadeIfFailed(Color colour, const GoItem& row)
         return colour.withAlpha(colour.a * failedTextOpacity);
 
     return colour;
+}
+
+Color getUrlColour(const GoItem& row)
+{
+    if (grazer::isPlainHttpURL(row.url))
+        return fadeIfFailed(notSecureColour, row);
+
+    return fadeIfFailed(dimTextColour, row);
 }
 
 Rect getStarButtonArea(Rect row)
@@ -471,7 +482,7 @@ void PaletteRows::paintRowText(UI::Graphics& g, std::size_t index, Rect content)
     g.drawText(fitted.title, content.withHeight(rowHeight * titleShare));
 
     g.setFontSize(detailFontSize);
-    g.setColour(fadeIfFailed(dimTextColour, row));
+    g.setColour(getUrlColour(row));
     g.drawText(fitted.url,
                content.withY(content.y + rowHeight * titleShare - urlRaise).withHeight(rowHeight * urlShare));
 }
