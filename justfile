@@ -67,7 +67,8 @@ format:
 
 # ---- Line coverage: which lines of Grazer's own code a normal day runs ----
 
-line_coverage := "python3 build-coverage/PondLineCoverage/line-coverage.py --app Grazer --program Grazer --installed-in ~/.local/libexec/grazer/Grazer.app/Contents/MacOS --own-code-folder Source --own-code-folder Lib --not-own-code-folder Tests"
+# Quoted so line-coverage.py expands ~ on each machine it runs on, not the shell here.
+line_coverage := "python3 build-coverage/PondLineCoverage/line-coverage.py --app Grazer --program Grazer --installed-in '~/.local/libexec/grazer/Grazer.app/Contents/MacOS' --own-code-folder Source --own-code-folder Lib --not-own-code-folder Tests"
 
 [doc('Build Release Grazer with line-coverage counters, in build-coverage')]
 [macos]
@@ -79,7 +80,12 @@ coverage-build:
 coverage-report *arguments:
     {{line_coverage}} report {{arguments}}
 
-[doc('Delete the line-coverage counts and kept programs')]
+[doc("Copy a host's line-coverage counts and its programs here, for coverage-report")]
 [macos]
-coverage-reset *arguments:
-    {{line_coverage}} reset {{arguments}}
+coverage-collect-from-host host *arguments:
+    {{line_coverage}} collect {{host}} {{arguments}}
+
+[doc('Delete the line-coverage counts and kept programs here, or on user@host')]
+[macos]
+coverage-reset host="" *arguments:
+    {{line_coverage}} reset {{host}} {{arguments}}

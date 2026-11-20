@@ -77,3 +77,5 @@ For now `just install` on macOS installs a build that counts which lines of
 Grazer's own code run, to find features nobody uses; `just coverage-report`
 lists the code that never ran and `just install-without-coverage` installs the
 normal build.
+`just coverage-collect-from-host user@host` copies another Mac's counts here,
+and the report then includes them.
