@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { accessSync, constants, statSync } from 'node:fs';
-import { delimiter, dirname, join } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -96,14 +96,37 @@ export function buildTarget(buildDirectory, target) {
   });
 }
 
-// passkeySigning is { teamId, codesignIdentity, provisioningProfile } to sign
-// for passkeys (cmake/GrazerPasskeys.cmake), or null for the
-// ad-hoc build. Left out, the build directory keeps whichever it was configured
-// with last, so a plain coverage build doesn't undo an install's choice.
-function describePasskeySigningArguments(passkeySigning) {
-  if (passkeySigning === undefined)
-    return [];
+const PASSKEY_SIGNING_ENVIRONMENT_VARIABLES = {
+  teamId: 'GRAZER_TEAM_ID',
+  codesignIdentity: 'GRAZER_CODESIGN_IDENTITY',
+  provisioningProfile: 'GRAZER_PROVISIONING_PROFILE',
+};
 
+// All three variables set: sign with the team, identity and profile, which lets
+// Grazer keep passkeys in the Secure Enclave.
+// None set: null, the ad-hoc build. Some set: an error naming the rest.
+export function readPasskeySigningSettings(environment) {
+  const settings = Object.fromEntries(
+    Object.entries(PASSKEY_SIGNING_ENVIRONMENT_VARIABLES)
+      .map(([setting, variable]) => [setting, environment[variable] ?? '']));
+
+  const missingVariables = Object.entries(PASSKEY_SIGNING_ENVIRONMENT_VARIABLES)
+    .filter(([setting]) => settings[setting] === '')
+    .map(([, variable]) => variable);
+
+  if (missingVariables.length === Object.keys(settings).length)
+    return null;
+
+  if (missingVariables.length > 0)
+    throw new Error(`Passkey signing needs all of ${Object.values(PASSKEY_SIGNING_ENVIRONMENT_VARIABLES).join(', ')}; `
+      + `missing ${missingVariables.join(', ')}`);
+
+  return { ...settings, provisioningProfile: resolve(settings.provisioningProfile) };
+}
+
+// passkeySigning is { teamId, codesignIdentity, provisioningProfile } to sign
+// for passkeys (cmake/GrazerPasskeys.cmake), or null for the ad-hoc build.
+function describePasskeySigningArguments(passkeySigning) {
   if (passkeySigning === null)
     return ['-DGRAZER_PASSKEYS=OFF'];
 

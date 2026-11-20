@@ -90,7 +90,7 @@ coverage-collect-from-host host *arguments:
 coverage-reset host="" *arguments:
     {{line_coverage}} reset {{host}} {{arguments}}
 
-[doc("Show Grazer's App ID, capabilities, profiles and Developer ID certificates in the Apple developer account (show), or create the Developer ID provisioning profile Grazer is signed with (create-profile PATH). Needs APPLE_API_KEY_ID, APPLE_API_ISSUER_ID and APPLE_API_KEY_PATH")]
+[doc("Show Grazer's App ID, capabilities, profiles and Developer ID certificates in the Apple developer account (show), or create the provisioning profile Grazer is signed with (create-profile developer-id|development PATH), or register a Mac so development profiles cover it (register-mac NAME UDID). Needs APPLE_API_KEY_ID, APPLE_API_ISSUER_ID and APPLE_API_KEY_PATH")]
 [macos]
 apple-developer-account *arguments:
     node scripts/apple-developer-account.mjs {{arguments}}

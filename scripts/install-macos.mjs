@@ -23,8 +23,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, rm, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { buildReleaseGrazer, main, run } from './lib.mjs';
+import { join } from 'node:path';
+import { buildReleaseGrazer, main, readPasskeySigningSettings, run } from './lib.mjs';
 
 const LOCAL_PREFIX = join(homedir(), '.local');
 const INSTALL_DIR = join(LOCAL_PREFIX, 'libexec', 'grazer');
@@ -150,34 +150,6 @@ const keepRunning = process.argv.includes('--keep-running');
 // which of its lines run (just coverage-report).
 const withLineCoverage = process.argv.includes('--line-coverage');
 
-const PASSKEY_SIGNING_ENVIRONMENT_VARIABLES = {
-  teamId: 'GRAZER_TEAM_ID',
-  codesignIdentity: 'GRAZER_CODESIGN_IDENTITY',
-  provisioningProfile: 'GRAZER_PROVISIONING_PROFILE',
-};
-
-// All three variables set: sign with the team, identity and profile, which lets
-// Grazer keep passkeys in the Secure Enclave.
-// None set: null, the ad-hoc build. Some set: an error naming the rest.
-function readPasskeySigningSettingsFromEnvironment() {
-  const settings = Object.fromEntries(
-    Object.entries(PASSKEY_SIGNING_ENVIRONMENT_VARIABLES)
-      .map(([setting, variable]) => [setting, process.env[variable] ?? '']));
-
-  const missingVariables = Object.entries(PASSKEY_SIGNING_ENVIRONMENT_VARIABLES)
-    .filter(([setting]) => settings[setting] === '')
-    .map(([, variable]) => variable);
-
-  if (missingVariables.length === Object.keys(settings).length)
-    return null;
-
-  if (missingVariables.length > 0)
-    throw new Error(`Passkey signing needs all of ${Object.values(PASSKEY_SIGNING_ENVIRONMENT_VARIABLES).join(', ')}; `
-      + `missing ${missingVariables.join(', ')}`);
-
-  return { ...settings, provisioningProfile: resolve(settings.provisioningProfile) };
-}
-
 // The linker's ad-hoc signature covers the executable only, so the ad-hoc build
 // gets the whole bundle (Info.plist, icon) sealed here. A passkey build was
 // already signed whole by CMake, and re-signing ad-hoc would wipe that.
@@ -196,7 +168,7 @@ function describeInstalledSignature(passkeySigning) {
 }
 
 await main(async () => {
-  const passkeySigning = readPasskeySigningSettingsFromEnvironment();
+  const passkeySigning = readPasskeySigningSettings(process.env);
   const buildDirectory = await buildReleaseGrazer({ withLineCoverage, passkeySigning });
 
   await mkdir(INSTALL_DIR, { recursive: true });
