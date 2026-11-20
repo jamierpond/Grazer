@@ -1,6 +1,9 @@
 #include "BrowserEngine.h"
 
 #include "Download.h"
+#include "Passkey.h"
+
+#include <eacp/Core/ObjC/Strings.h>
 
 #include <filesystem>
 #include <unordered_set>
@@ -279,6 +282,102 @@ void savePage(eacp::Graphics::WebView& view)
                        download.delegate = (id<WKDownloadDelegate>) delegate;
                      }];
     }
+}
+
+} // namespace BrowserEngine
+
+// The passkey page script's channel. eacp's own handlers pass native only the
+// message text, so this one is Grazer's: it reads the sending frame and the web
+// view from the WKScriptMessage itself.
+
+static NSString* const passkeyChannelName = @"grazerPasskey";
+static char passkeyMessageHandlerKey;
+static char passkeyMessageReceiverKey;
+
+@interface GrazerPasskeyMessageReceiver : NSObject
+{
+@public
+    BrowserEngine::PasskeyMessageHandler onMessage;
+}
+@end
+
+@implementation GrazerPasskeyMessageReceiver
+@end
+
+@interface GrazerPasskeyMessageHandler : NSObject <WKScriptMessageHandler>
+@end
+
+namespace
+{
+
+std::string serializeOriginOfFrame(WKFrameInfo* frame)
+{
+    auto* origin = frame.securityOrigin;
+    auto port = static_cast<int>(origin.port);
+
+    return grazer::serializeOrigin(eacp::Strings::toStdString(origin.protocol),
+                                   eacp::Strings::toStdString(origin.host),
+                                   port);
+}
+
+// Iframes are not offered passkeys: the page script runs in the main frame only.
+void deliverPasskeyMessage(WKScriptMessage* message)
+{
+    if (!message.frameInfo.isMainFrame || ![message.body isKindOfClass:[NSString class]])
+        return;
+
+    GrazerPasskeyMessageReceiver* receiver =
+        objc_getAssociatedObject(message.webView, &passkeyMessageReceiverKey);
+
+    if (receiver == nil)
+        return;
+
+    auto* body = (NSString*) message.body;
+    receiver->onMessage(eacp::Strings::toStdString(body),
+                        serializeOriginOfFrame(message.frameInfo));
+}
+
+void addPasskeyMessageHandlerOnce(WKUserContentController* controller)
+{
+    if (objc_getAssociatedObject(controller, &passkeyMessageHandlerKey) != nil)
+        return;
+
+    auto* handler = [[GrazerPasskeyMessageHandler alloc] init];
+    [controller addScriptMessageHandler:handler name:passkeyChannelName];
+    objc_setAssociatedObject(
+        controller, &passkeyMessageHandlerKey, handler, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [handler release];
+}
+
+} // namespace
+
+@implementation GrazerPasskeyMessageHandler
+
+- (void)userContentController:(WKUserContentController*)controller
+      didReceiveScriptMessage:(WKScriptMessage*)message
+{
+    deliverPasskeyMessage(message);
+}
+
+@end
+
+namespace BrowserEngine
+{
+
+void receivePasskeyMessages(eacp::Graphics::WebView& view, PasskeyMessageHandler onMessage)
+{
+    auto* webView = findWebKitView(view);
+
+    if (webView == nil)
+        return;
+
+    auto* receiver = [[GrazerPasskeyMessageReceiver alloc] init];
+    receiver->onMessage = std::move(onMessage);
+    objc_setAssociatedObject(
+        webView, &passkeyMessageReceiverKey, receiver, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [receiver release];
+
+    addPasskeyMessageHandlerOnce(webView.configuration.userContentController);
 }
 
 } // namespace BrowserEngine

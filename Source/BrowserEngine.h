@@ -39,4 +39,13 @@ void supplyWebCryptoMasterKeyFrom(const std::string& directory);
 // Whether the page is playing sound right now. Always false on Windows.
 bool isPlayingAudio(eacp::Graphics::WebView& view);
 
+using PasskeyMessageHandler =
+    std::function<void(const std::string& message, const std::string& origin)>;
+
+// Hand `onMessage` each message the passkey page script posts from the tab's
+// main frame, with the origin WebKit gives that frame, never one the page names.
+// A popup shares its opener's channel; its own call routes its messages here.
+// Empty on Windows, which keeps no passkeys.
+void receivePasskeyMessages(eacp::Graphics::WebView& view, PasskeyMessageHandler onMessage);
+
 } // namespace BrowserEngine

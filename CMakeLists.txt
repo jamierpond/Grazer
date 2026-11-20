@@ -104,7 +104,7 @@ target_link_libraries(GrazerBrowser PUBLIC eacp-core emberstore FrecencySearch G
 set(EACP_MACOS_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/macOSBundleInfo.plist.in"
         CACHE INTERNAL "eacp macOS bundle Info.plist template")
 
-add_executable(Grazer Source/Main.cpp Source/LoadingBackdrop.cpp Source/PaletteView.cpp)
+add_executable(Grazer Source/Main.cpp Source/LoadingBackdrop.cpp Source/PaletteView.cpp Source/PasskeyRequests.cpp)
 
 # eacp's Text/Font.h ends an `if constexpr` chain with a return MSVC calls
 # unreachable (C4702); that warning ignores /external:W0, so it would fail
@@ -128,7 +128,8 @@ target_link_libraries(Grazer PRIVATE GrazerBrowser eacp-webview eacp-network-rpc
 # implements: the menu bar (AppMenu), what makes a web view a browser's
 # (BrowserEngine), a terminal for the CLI modes (Console), and the URLs the OS
 # hands Grazer -- kAEGetURL on macOS, the command line on Windows (OpenUrls),
-# and where passkeys are kept -- the Secure Enclave on macOS (PlatformPasskeyStore).
+# where passkeys are kept -- the Secure Enclave on macOS (PlatformPasskeyStore) --
+# and the alert that asks which passkey to use (PasskeyChooser).
 # Reloading a page past the cache is macOS-only (ReloadFromOrigin).
 if (APPLE)
     enable_language(OBJCXX)
@@ -138,6 +139,7 @@ if (APPLE)
             Source/Console-macOS.mm
             Source/DefaultBrowser-macOS.mm
             Source/OpenUrls-macOS.mm
+            Source/PasskeyChooser-macOS.mm
             Source/PlatformPasskeyStore-macOS.mm
             Source/ReloadFromOrigin-macOS.mm)
     target_link_libraries(Grazer PRIVATE
@@ -150,6 +152,7 @@ elseif (WIN32)
             Source/BrowserEngine-Windows.cpp
             Source/Console-Windows.cpp
             Source/OpenUrls-Windows.cpp
+            Source/PasskeyChooser-Windows.cpp
             Source/PlatformPasskeyStore-Windows.cpp)
 endif ()
 

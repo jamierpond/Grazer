@@ -10,6 +10,7 @@
 #include "OpenUrls.h"
 #include "PageScript.h"
 #include "PaletteView.h"
+#include "PasskeyRequests.h"
 #include <GrazerPalette/Palette.h>
 #include "Places.h"
 #include "ReloadFromOrigin.h"
@@ -170,6 +171,14 @@ struct Browser
     HistoryStore history {atomic};
     SessionStore session {atomic};
     std::int64_t nextTabId = 0;
+
+    PasskeyRequests passkeys {[this](std::int64_t id) -> PasskeyRequests::TabView
+                              {
+                                  if (auto [window, tab] = findTab(id); tab != nullptr)
+                                      return tab->view();
+
+                                  return std::nullopt;
+                              }};
 
     // While the session's windows are being reopened, so the session isn't
     // saved with only the ones made so far.
@@ -341,6 +350,7 @@ struct BrowserView final : View
     {
         auto& tab = tabs.createNew(nextTabId++, getWebViewOptions());
         tab.view().addUserScript(vimiumScript(sites.excludedKeybindingsJSON()));
+        PasskeyRequests::addPageScript(tab.view());
         tab.view().addScriptMessageHandler(
             "grazer",
             [this, t = &tab](const std::string& command)
@@ -433,6 +443,7 @@ struct BrowserView final : View
 
         BrowserEngine::allowPictureInPicture(view);
         BrowserEngine::saveAttachmentsAsDownloads(view);
+        browser.passkeys.receiveRequestsFrom(view, tab.id);
 
         BrowserEngine::reportDownloads(
             view,
