@@ -44,6 +44,10 @@ install *args:
 install-without-coverage *args:
     {{msvc}} node scripts/install.mjs {{args}}
 
+[doc('List the crash reports nobody has marked fixed here and on other machines (list [HOST ...]), or mark one fixed (mark-fixed HOST ID); reads the script from build-test, which just test configures')]
+crash-reports *arguments:
+    python3 build-test/PondCrashReports/crash-reports.py --app Grazer {{arguments}}
+
 [doc('Move branch-pinned deps (eacp@jp/develop, PondDev@main, Rudder@main, ...) to their latest commits in lockstep.lock; builds nothing')]
 update-deps:
     {{msvc}} node scripts/update-deps.mjs

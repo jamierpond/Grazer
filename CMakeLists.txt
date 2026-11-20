@@ -30,15 +30,6 @@ lockstep_add_package(
         GIT_TAG main
         SYSTEM YES)
 
-# Crash reports (Crashout): Grazer writes one to
-# <app support>/Grazer/Crashes/pending/<id>/ when it crashes, which
-# scripts/crash-reports.py lists. Its handler exists on macOS and Windows only.
-lockstep_add_package(
-        NAME Crashout
-        GITHUB_REPOSITORY jamierpond/Crashout
-        GIT_TAG main
-        SYSTEM YES)
-
 list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 
 # The libraries the pond apps share (PondApp, SessionLog, FrecencySearch,
@@ -172,10 +163,8 @@ target_link_libraries(Grazer PRIVATE GrazerVersion)
 
 pond_write_line_coverage(Grazer APP_NAME Grazer)
 
-if (APPLE OR WIN32)
-    eacp_enable_crash_reporting(Grazer SYMBOLS_DIR ${PROJECT_BINARY_DIR}/symbols)
-    target_link_libraries(Grazer PRIVATE eacp-crash-faults)
-endif ()
+# Crash reports in pond/Grazer/Crashes/Grazer, which just crash-reports lists.
+pond_enable_crash_reports(Grazer)
 
 if (PROJECT_IS_TOP_LEVEL)
     enable_testing()

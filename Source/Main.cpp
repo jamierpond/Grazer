@@ -31,15 +31,11 @@
 #include <emberstore/AppDatabase.h>
 
 #include <PondApp/SingleInstance.h>
+#include <PondCrashReports/CrashReports.h>
+#include <PondVersion.h>
 #include <RudderClient.h>
 #include <SessionLog/EventLine.h>
 #include <SessionLog/SessionLog.h>
-
-#if EACP_CRASH_REPORTING
-#include <PondVersion.h>
-#include <eacp/CrashReporting/CrashReporting.h>
-#include <eacp/CrashReporting/Faults/Faults.h>
-#endif
 
 #include <algorithm>
 #include <charconv>
@@ -1969,41 +1965,6 @@ std::int64_t parseTabId(const std::string& text)
     }
 }
 
-#if EACP_CRASH_REPORTING
-// `Grazer --crash-for-testing <fault>` crashes on purpose with one of Crashout's
-// faults (nullptr, abort, stackoverflow, ...), to check a crash report end to end.
-constexpr auto crashForTestingFlag = std::string_view {"--crash-for-testing"};
-
-void crashIfAskedToForTesting(int argc, char** argv)
-{
-    for (auto index = 1; index + 1 < argc; ++index)
-    {
-        if (argv[index] == crashForTestingFlag)
-            CrashReporting::Faults::triggerFault(
-                argv[index + 1], CrashReporting::Faults::ThreadChoice::main);
-    }
-}
-#endif
-
-// The command line without `--crash-for-testing <fault>`, which a plain launch handles.
-std::vector<std::string> getArgumentsWithoutCrashForTesting(int argc, char** argv)
-{
-    auto arguments = std::vector<std::string> {argv, argv + argc};
-
-#if EACP_CRASH_REPORTING
-    auto flag = std::ranges::find(arguments, crashForTestingFlag);
-
-    if (flag != arguments.end())
-    {
-        auto argumentsAfterFlag = std::distance(std::next(flag), arguments.end());
-        auto flagAndFaultCount = 1 + std::min<std::ptrdiff_t>(1, argumentsAfterFlag);
-        arguments.erase(flag, std::next(flag, flagAndFaultCount));
-    }
-#endif
-
-    return arguments;
-}
-
 // Recognises the control flags; returns nullopt for a plain launch. A known
 // flag missing its argument is a hard usage error rather than a silent launch.
 std::optional<ControlRequest>
@@ -2257,12 +2218,8 @@ int runBrowser(int argc, char* argv[])
         return Apps::run<ControlClientApp>();
     }
 
-#if EACP_CRASH_REPORTING
-    auto crashReportingOptions = CrashReporting::Options {};
-    crashReportingOptions.release = pond::getVersionString();
-    CrashReporting::start(crashReportingOptions);
-    crashIfAskedToForTesting(argc, argv);
-#endif
+    pondcrashreports::startCrashReports(
+        {.appName = "Grazer", .release = pond::getVersionString()}, argc, argv);
 
     return Apps::run<GrazerApp>(argc, argv);
 }
@@ -2272,10 +2229,8 @@ int main(int argc, char* argv[])
 {
     using namespace eacp;
 
-#if EACP_CRASH_REPORTING
-    if (auto handlerExitCode = CrashReporting::runHandlerIfRequested(argc, argv))
+    if (auto handlerExitCode = pondcrashreports::runCrashHandlerIfRequested(argc, argv))
         return *handlerExitCode;
-#endif
 
     Apps::setCommandLineArgs(argc, argv);
 
@@ -2289,7 +2244,7 @@ int main(int argc, char* argv[])
     // An explicit control flag never launches a window: talk to the running
     // instance and exit.
     if (auto request =
-            parseControlRequest(getArgumentsWithoutCrashForTesting(argc, argv)))
+            parseControlRequest(pondcrashreports::getArgumentsWithoutCrashForTesting(argc, argv)))
     {
         pendingRequest = request;
         return Apps::run<ControlClientApp>();
