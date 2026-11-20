@@ -77,11 +77,16 @@ pond_add_line_coverage_counters()
 # Rudder runs too. Source is on the include path for the app headers the tests
 # use (PageScript.h).
 add_library(GrazerBrowser STATIC
+        Lib/Browser/Base64Url.cpp
+        Lib/Browser/Cbor.cpp
         Lib/Browser/Download.cpp
         Lib/Browser/ErrorPage.cpp
         Lib/Browser/History.cpp
         Lib/Browser/Mru.cpp
         Lib/Browser/PaletteKeys.cpp
+        Lib/Browser/Passkey.cpp
+        Lib/Browser/PasskeyAuthenticatorData.cpp
+        Lib/Browser/PasskeyReply.cpp
         Lib/Browser/Places.cpp
         Lib/Browser/RudderContexts.cpp
         Lib/Browser/Session.cpp
@@ -91,7 +96,7 @@ add_library(GrazerBrowser STATIC
         Lib/Browser/TabMatch.cpp)
 
 target_include_directories(GrazerBrowser PUBLIC Lib/Browser Source)
-target_link_libraries(GrazerBrowser PUBLIC emberstore FrecencySearch GrazerPalette SearchKeys SessionLog RudderProtocol)
+target_link_libraries(GrazerBrowser PUBLIC eacp-core emberstore FrecencySearch GrazerPalette SearchKeys SessionLog RudderProtocol)
 
 # eacp's bundle plist template plus http/https URL types, so Grazer can be
 # picked as the default browser and gets the URLs macOS opens with it.
