@@ -1,10 +1,9 @@
 # Passkeys (WebAuthn) for arbitrary sites.
 #
-# WKWebView hands navigator.credentials.create/get to AuthenticationServices,
-# which refuses any app without a team application identifier and, for sites
-# that aren't the app's own associated domains, without Apple's managed
-# browser entitlement com.apple.developer.web-browser.public-key-credential.
-# Both have to be authorised by a provisioning profile embedded in the bundle,
+# Grazer is its own passkey authenticator: it keeps each passkey's private key
+# in the Secure Enclave, in the keychain access group <team>.<bundle id>. The
+# keychain only lets an app use an access group its signature claims, and the
+# claim only holds when a provisioning profile embedded in the bundle allows it,
 # so this signs Grazer with a real identity, the entitlements in
 # Grazer.entitlements.in and the profile at Contents/embedded.provisionprofile.
 #
@@ -19,18 +18,22 @@
 # The team and identity have no defaults: which developer account signs
 # Grazer is always an explicit choice.
 #
-# Off by default: without a profile carrying the entitlement, a signed build
-# claiming it would be killed at launch, and the ad-hoc build is what we have.
+# Apple's managed browser entitlement
+# com.apple.developer.web-browser.public-key-credential is claimed only when
+# the profile carries it: claiming an entitlement the profile does not allow
+# gets the app killed at launch.
 
-option(GRAZER_PASSKEYS "Sign Grazer with the browser passkey entitlement + profile" OFF)
+option(GRAZER_PASSKEYS
+        "Sign Grazer with a team, identity and provisioning profile so it can keep passkeys in the Secure Enclave"
+        OFF)
 
 set(GRAZER_TEAM_ID "" CACHE STRING "Apple team that owns Grazer's App ID")
 set(GRAZER_CODESIGN_IDENTITY "" CACHE STRING
         "codesign identity matching the provisioning profile")
 set(GRAZER_PROVISIONING_PROFILE "" CACHE FILEPATH
-        "Developer ID provisioning profile for Grazer's bundle id with the web-browser.public-key-credential capability")
+        "Developer ID provisioning profile for Grazer's bundle id")
 
-set(GRAZER_PASSKEY_ENTITLEMENT com.apple.developer.web-browser.public-key-credential)
+set(GRAZER_BROWSER_PASSKEY_ENTITLEMENT com.apple.developer.web-browser.public-key-credential)
 
 function(_grazer_profile_value decoded key out)
     execute_process(
@@ -41,14 +44,12 @@ function(_grazer_profile_value decoded key out)
     set(${out} "${value}" PARENT_SCOPE)
 endfunction()
 
-# Fail at configure time, with the reason, rather than shipping an app that
-# AMFI kills on launch or that still can't do passkeys.
-function(_grazer_check_profile profile bundle_id)
+function(_grazer_decode_profile profile out)
     if (NOT EXISTS "${profile}")
         message(FATAL_ERROR
                 "GRAZER_PASSKEYS needs GRAZER_PROVISIONING_PROFILE: a Developer ID "
-                "provisioning profile for ${GRAZER_TEAM_ID}.${bundle_id} with the "
-                "${GRAZER_PASSKEY_ENTITLEMENT} capability (got '${profile}').")
+                "provisioning profile for ${GRAZER_TEAM_ID}.${GRAZER_BUNDLE_ID} "
+                "(got '${profile}').")
     endif ()
 
     set(decoded "${CMAKE_CURRENT_BINARY_DIR}/GrazerProfile.plist")
@@ -61,20 +62,46 @@ function(_grazer_check_profile profile bundle_id)
         message(FATAL_ERROR "Can't decode provisioning profile ${profile}")
     endif ()
 
-    _grazer_profile_value("${decoded}" "Entitlements:com.apple.application-identifier" app_id)
-    _grazer_profile_value("${decoded}" "Entitlements:${GRAZER_PASSKEY_ENTITLEMENT}" passkeys)
+    set(${out} "${decoded}" PARENT_SCOPE)
+endfunction()
 
-    if (NOT app_id STREQUAL "${GRAZER_TEAM_ID}.${bundle_id}")
+# The profile allows a keychain group either by name or by a "<team>.*" pattern.
+function(_grazer_check_keychain_group decoded profile)
+    _grazer_profile_value("${decoded}" "Entitlements:keychain-access-groups" groups)
+    set(group "${GRAZER_TEAM_ID}.${GRAZER_BUNDLE_ID}")
+    string(FIND "${groups}" "${group}" exact_match)
+    string(FIND "${groups}" "${GRAZER_TEAM_ID}.*" pattern_match)
+
+    if (exact_match EQUAL -1 AND pattern_match EQUAL -1)
         message(FATAL_ERROR
-                "${profile} is for '${app_id}', not ${GRAZER_TEAM_ID}.${bundle_id}")
+                "${profile} doesn't allow the keychain access group ${group}, "
+                "where Grazer keeps its passkeys; it allows: ${groups}")
+    endif ()
+endfunction()
+
+# Fails at configure time, with the reason, rather than shipping an app that
+# AMFI kills on launch. Sets GRAZER_BROWSER_PASSKEY_ENTITLEMENT_LINES to the
+# plist lines claiming Apple's browser entitlement, or to nothing when the
+# profile doesn't carry it.
+function(_grazer_check_profile profile)
+    _grazer_decode_profile("${profile}" decoded)
+    _grazer_profile_value("${decoded}" "Entitlements:com.apple.application-identifier" app_id)
+
+    if (NOT app_id STREQUAL "${GRAZER_TEAM_ID}.${GRAZER_BUNDLE_ID}")
+        message(FATAL_ERROR
+                "${profile} is for '${app_id}', not ${GRAZER_TEAM_ID}.${GRAZER_BUNDLE_ID}")
     endif ()
 
-    if (NOT passkeys STREQUAL "true")
-        message(FATAL_ERROR
-                "${profile} doesn't carry ${GRAZER_PASSKEY_ENTITLEMENT}. Apple has "
-                "to grant it to team ${GRAZER_TEAM_ID} first (developer.apple.com/"
-                "contact/request/macos-browsers-passkeys), then enable it on the "
-                "App ID and regenerate the profile.")
+    _grazer_check_keychain_group("${decoded}" "${profile}")
+    _grazer_profile_value("${decoded}" "Entitlements:${GRAZER_BROWSER_PASSKEY_ENTITLEMENT}" browser)
+
+    if (browser STREQUAL "true")
+        message(STATUS "Grazer: ${profile} carries ${GRAZER_BROWSER_PASSKEY_ENTITLEMENT}; claiming it")
+        set(GRAZER_BROWSER_PASSKEY_ENTITLEMENT_LINES
+                "<key>${GRAZER_BROWSER_PASSKEY_ENTITLEMENT}</key>\n\t<true/>" PARENT_SCOPE)
+    else ()
+        message(STATUS "Grazer: ${profile} doesn't carry ${GRAZER_BROWSER_PASSKEY_ENTITLEMENT}; not claiming it")
+        set(GRAZER_BROWSER_PASSKEY_ENTITLEMENT_LINES "" PARENT_SCOPE)
     endif ()
 endfunction()
 
@@ -89,9 +116,9 @@ function(grazer_enable_passkeys target bundle_id)
                 "set explicitly (no defaults).")
     endif ()
 
-    _grazer_check_profile("${GRAZER_PROVISIONING_PROFILE}" "${bundle_id}")
-
     set(GRAZER_BUNDLE_ID "${bundle_id}")
+    _grazer_check_profile("${GRAZER_PROVISIONING_PROFILE}")
+
     set(entitlements "${CMAKE_CURRENT_BINARY_DIR}/${target}.entitlements")
     configure_file("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/Grazer.entitlements.in"
             "${entitlements}" @ONLY)
@@ -105,6 +132,6 @@ function(grazer_enable_passkeys target bundle_id)
                     --sign "${GRAZER_CODESIGN_IDENTITY}"
                     --entitlements "${entitlements}"
                     "$<TARGET_BUNDLE_DIR:${target}>"
-            COMMENT "Signing ${target} with the passkey entitlement"
+            COMMENT "Signing ${target} with team ${GRAZER_TEAM_ID} and its provisioning profile"
             VERBATIM)
 endfunction()

@@ -6,7 +6,10 @@
 	<string>@GRAZER_TEAM_ID@.@GRAZER_BUNDLE_ID@</string>
 	<key>com.apple.developer.team-identifier</key>
 	<string>@GRAZER_TEAM_ID@</string>
-	<key>com.apple.developer.web-browser.public-key-credential</key>
-	<true/>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>@GRAZER_TEAM_ID@.@GRAZER_BUNDLE_ID@</string>
+	</array>
+	@GRAZER_BROWSER_PASSKEY_ENTITLEMENT_LINES@
 </dict>
 </plist>

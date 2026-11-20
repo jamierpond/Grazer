@@ -156,7 +156,8 @@ const PASSKEY_SIGNING_ENVIRONMENT_VARIABLES = {
   provisioningProfile: 'GRAZER_PROVISIONING_PROFILE',
 };
 
-// All three variables set: sign with the passkey entitlement and profile.
+// All three variables set: sign with the team, identity and profile, which lets
+// Grazer keep passkeys in the Secure Enclave.
 // None set: null, the ad-hoc build. Some set: an error naming the rest.
 function readPasskeySigningSettingsFromEnvironment() {
   const settings = Object.fromEntries(
@@ -189,9 +190,9 @@ async function signAndVerifyStagedBundle(passkeySigning) {
 
 function describeInstalledSignature(passkeySigning) {
   if (passkeySigning === null)
-    return 'ad-hoc (no passkeys; set GRAZER_TEAM_ID, GRAZER_CODESIGN_IDENTITY and GRAZER_PROVISIONING_PROFILE for them)';
+    return 'ad-hoc, so Grazer offers sites no passkeys (set GRAZER_TEAM_ID, GRAZER_CODESIGN_IDENTITY and GRAZER_PROVISIONING_PROFILE to sign it for passkeys)';
 
-  return `"${passkeySigning.codesignIdentity}" with the passkey entitlement and profile`;
+  return `"${passkeySigning.codesignIdentity}" for team ${passkeySigning.teamId} with ${passkeySigning.provisioningProfile} embedded, so Grazer keeps passkeys in the Secure Enclave`;
 }
 
 await main(async () => {

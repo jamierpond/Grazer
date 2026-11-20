@@ -155,8 +155,8 @@ else ()
     eacp_set_app_icon(Grazer IMAGE ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Icon/Icon.png)
 endif ()
 
-# Passkeys need Apple's browser entitlement + a provisioning profile; off
-# until that profile exists. See cmake/GrazerPasskeys.cmake.
+# Passkeys need Grazer signed with a team, identity and provisioning profile;
+# off for the ad-hoc build. See cmake/GrazerPasskeys.cmake.
 include(cmake/GrazerPasskeys.cmake)
 grazer_enable_passkeys(Grazer audio.pond.grazer)
 

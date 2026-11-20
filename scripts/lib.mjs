@@ -97,7 +97,7 @@ export function buildTarget(buildDirectory, target) {
 }
 
 // passkeySigning is { teamId, codesignIdentity, provisioningProfile } to sign
-// with the passkey entitlement (cmake/GrazerPasskeys.cmake), or null for the
+// for passkeys (cmake/GrazerPasskeys.cmake), or null for the
 // ad-hoc build. Left out, the build directory keeps whichever it was configured
 // with last, so a plain coverage build doesn't undo an install's choice.
 function describePasskeySigningArguments(passkeySigning) {
