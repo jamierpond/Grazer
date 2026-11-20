@@ -4,6 +4,7 @@ add_executable(GrazerTests
         HistoryTests.cpp
         MruTests.cpp
         PaletteKeysTests.cpp
+        PasskeyTests.cpp
         PlacesTests.cpp
         RudderContextsTests.cpp
         SessionTests.cpp
