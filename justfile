@@ -28,11 +28,23 @@ tidy: build
 run:
     {{msvc}} node scripts/run.mjs
 
-[doc('Build Release (locked deps) + install: ~/.local/libexec/grazer/Grazer.app (+ ~/.local/bin/grazer), or %LOCALAPPDATA%\Programs\Grazer on Windows. --keep-running leaves a running Grazer up')]
+[doc('For now installs the line-coverage build (just install-without-coverage for the normal one): Release (locked deps) into ~/.local/libexec/grazer/Grazer.app (+ ~/.local/bin/grazer), keeping the old and new programs for coverage-report. --keep-running leaves a running Grazer up')]
+[macos]
+install *args: coverage-build
+    {{line_coverage}} keep
+    node scripts/install.mjs --line-coverage {{args}}
+    {{line_coverage}} keep
+
+[doc('Build Release (locked deps) + install to %LOCALAPPDATA%\Programs\Grazer. --keep-running leaves a running Grazer up')]
+[windows]
 install *args:
     {{msvc}} node scripts/install.mjs {{args}}
 
-[doc('Move branch-pinned deps (eacp@jp/develop, Rudder@main, ...) to their latest commits in lockstep.lock; builds nothing')]
+[doc('Build Release (locked deps) without line coverage + install: ~/.local/libexec/grazer/Grazer.app (+ ~/.local/bin/grazer), or %LOCALAPPDATA%\Programs\Grazer on Windows. --keep-running leaves a running Grazer up')]
+install-without-coverage *args:
+    {{msvc}} node scripts/install.mjs {{args}}
+
+[doc('Move branch-pinned deps (eacp@jp/develop, PondDev@main, Rudder@main, ...) to their latest commits in lockstep.lock; builds nothing')]
 update-deps:
     {{msvc}} node scripts/update-deps.mjs
 
@@ -48,3 +60,22 @@ icon:
 [unix]
 format:
     git ls-files '*.h' '*.cpp' '*.mm' | xargs clang-format -i
+
+# ---- Line coverage: which lines of Grazer's own code a normal day runs ----
+
+line_coverage := "python3 build-coverage/PondLineCoverage/line-coverage.py --app Grazer --program Grazer --installed-in ~/.local/libexec/grazer/Grazer.app/Contents/MacOS --own-code-folder Source --own-code-folder Lib --not-own-code-folder Tests"
+
+[doc('Build Release Grazer with line-coverage counters, in build-coverage')]
+[macos]
+coverage-build:
+    node scripts/coverage-build.mjs
+
+[doc('Print the code that never ran in any installed coverage build, largest first, and write an HTML per-line view')]
+[macos]
+coverage-report *arguments:
+    {{line_coverage}} report {{arguments}}
+
+[doc('Delete the line-coverage counts and kept programs')]
+[macos]
+coverage-reset *arguments:
+    {{line_coverage}} reset {{arguments}}

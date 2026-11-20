@@ -17,14 +17,14 @@
 // Wim's data (~/Library/Application Support/pond/Wim, WebKit audio.pond.wim)
 // is left alone.
 //
-// Dependencies come from lockstep.lock: branch-pinned packages (Rudder@main)
+// Dependencies come from lockstep.lock: branch-pinned packages (PondDev@main)
 // stay at the locked commit. Run `just update-deps` first for the latest.
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, rm, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { RELEASE_BUILD_DIR, buildTarget, lockstepSourceArgs, main, run } from './lib.mjs';
+import { buildReleaseGrazer, main, run } from './lib.mjs';
 
 const LOCAL_PREFIX = join(homedir(), '.local');
 const INSTALL_DIR = join(LOCAL_PREFIX, 'libexec', 'grazer');
@@ -146,18 +146,17 @@ async function removeOldName() {
 // picks the new build up on its next launch.
 const keepRunning = process.argv.includes('--keep-running');
 
-await main(async () => {
-  await run('cmake', [
-    '-G', 'Ninja', '-B', RELEASE_BUILD_DIR, '-DCMAKE_BUILD_TYPE=Release',
-    ...lockstepSourceArgs(),
-  ]);
+// --line-coverage: install the build from build-coverage, whose Grazer counts
+// which of its lines run (just coverage-report).
+const withLineCoverage = process.argv.includes('--line-coverage');
 
-  await buildTarget(RELEASE_BUILD_DIR, 'Grazer');
+await main(async () => {
+  const buildDirectory = await buildReleaseGrazer({ withLineCoverage });
 
   await mkdir(INSTALL_DIR, { recursive: true });
   await mkdir(COMMAND_DIR, { recursive: true });
   await rm(STAGING, { recursive: true, force: true });
-  await run('ditto', [join(RELEASE_BUILD_DIR, 'Grazer.app'), STAGING]);
+  await run('ditto', [join(buildDirectory, 'Grazer.app'), STAGING]);
 
   // The linker's ad-hoc signature covers the executable only; seal the whole
   // bundle (Info.plist, icon) so it verifies and carries the bundle id. Still

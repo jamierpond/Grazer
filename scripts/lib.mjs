@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const BUILD_DIR = join(ROOT, 'build');
 export const RELEASE_BUILD_DIR = join(ROOT, 'build-release');
+export const LINE_COVERAGE_BUILD_DIR = join(ROOT, 'build-coverage');
 
 // lockstep source overrides from the environment, for a fresh configure: export
 // e.g. LOCKSTEP_eacp_SOURCE=$HOME/projects/eacp to build against a local checkout.
@@ -93,6 +94,22 @@ export function buildTarget(buildDirectory, target) {
   return run('cmake', ['--build', buildDirectory, '--target', target], {
     env: { ...process.env, ...LINE_PER_STEP_ENVIRONMENT },
   });
+}
+
+// Configure (locked deps) + build Release Grazer, in build-coverage with line
+// coverage counters (needs clang) or in build-release without. Returns the build
+// directory.
+export async function buildReleaseGrazer({ withLineCoverage }) {
+  const buildDirectory = withLineCoverage ? LINE_COVERAGE_BUILD_DIR : RELEASE_BUILD_DIR;
+  const lineCoverageArguments = withLineCoverage ? ['-DPOND_LINE_COVERAGE=ON'] : [];
+
+  await run('cmake', [
+    '-G', 'Ninja', '-B', buildDirectory, '-DCMAKE_BUILD_TYPE=Release',
+    ...lineCoverageArguments, ...lockstepSourceArgs(),
+  ]);
+
+  await buildTarget(buildDirectory, 'Grazer');
+  return buildDirectory;
 }
 
 export function runNode(script, args = []) {

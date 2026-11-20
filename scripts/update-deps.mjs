@@ -1,4 +1,4 @@
-// Moves branch-pinned packages (eacp@jp/develop, Rudder@main, ...) to their branch
+// Moves branch-pinned packages (eacp@jp/develop, PondDev@main, ...) to their branch
 // heads: the first build tree configures in lockstep's update mode, which
 // rewrites lockstep.lock, then every tree reconfigures locked to pick it up.
 // Nothing is built, so a running dev Grazer isn't touched.

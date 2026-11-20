@@ -41,10 +41,21 @@ lockstep_add_package(
 
 list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 
+# The libraries the pond apps share (PondApp, SessionLog, FrecencySearch,
+# SearchKeys, pond_add_version_library, line coverage). Must come after eacp:
+# PondDev fetches its own copy only when none exists. Work against a local
+# checkout with:
+#   cmake -B build -DLOCKSTEP_PondDev_SOURCE=$HOME/projects/PondDev
+lockstep_add_package(
+        NAME PondDev
+        GITHUB_REPOSITORY jamierpond/PondDev
+        GIT_TAG main
+        SYSTEM YES)
+
 # Publishes Grazer's tabs to Rudder (the app switcher) as contexts, so a tab is
-# one search away from anywhere. Only Rudder's client library is built; Grazer
-# behaves exactly as before when Rudder isn't running. Work against a local
-# Rudder checkout with:
+# one search away from anywhere. Only Rudder's client library (RudderClient) is
+# built; Grazer behaves exactly as before when Rudder isn't running. Work
+# against a local Rudder checkout with:
 #   cmake -B build -DLOCKSTEP_Rudder_SOURCE=$HOME/projects/Rudder
 lockstep_add_package(
         NAME Rudder
@@ -63,6 +74,11 @@ endif ()
 
 # Set after the packages, so only this project's own targets build with -Werror.
 set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
+
+# With -DPOND_LINE_COVERAGE=ON, counts which lines of Grazer's own code run, so
+# features nobody uses can be found (just coverage-report). After the packages,
+# so only Grazer's code is counted.
+pond_add_line_coverage_counters()
 
 # Grazer's browser logic (URL/omnibox parsing, places, history, session,
 # palette ranking) lives in a plain static library so it stays unit-testable
@@ -153,6 +169,8 @@ target_link_libraries(Grazer PRIVATE PondApp RudderClient)
 # Each crash report says which version and commit Grazer was built from.
 pond_add_version_library(GrazerVersion)
 target_link_libraries(Grazer PRIVATE GrazerVersion)
+
+pond_write_line_coverage(Grazer APP_NAME Grazer)
 
 if (APPLE OR WIN32)
     eacp_enable_crash_reporting(Grazer SYMBOLS_DIR ${PROJECT_BINARY_DIR}/symbols)

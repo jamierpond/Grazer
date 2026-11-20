@@ -13,7 +13,7 @@
 // http/https, so it is offered under Settings > Default apps and links open
 // in it as `Grazer.exe "<url>"`. Windows lets only the user pick the default.
 //
-// Dependencies come from lockstep.lock: branch-pinned packages (Rudder@main)
+// Dependencies come from lockstep.lock: branch-pinned packages (PondDev@main)
 // stay at the locked commit. Run `just update-deps` first for the latest.
 import { execFileSync, spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';

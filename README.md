@@ -62,7 +62,18 @@ Grazer builds against [eacp](https://github.com/eyalamirmusic/eacp)'s
 listed in CMakeLists.txt. Build against a local checkout with
 `-DLOCKSTEP_eacp_SOURCE=$HOME/path/to/eacp`.
 
+The libraries the pond apps share (PondApp, SessionLog, FrecencySearch,
+SearchKeys, the version string, line coverage) come from
+[PondDev](https://github.com/jamierpond/PondDev); Rudder supplies only its client
+library. Build against a local checkout with
+`-DLOCKSTEP_PondDev_SOURCE=$HOME/projects/PondDev`.
+
 Dependencies are pinned in `lockstep.lock`. Branch-pinned ones (eacp@jp/develop,
-Rudder@main, emberstore@main) stay at the locked commit until
+PondDev@main, Rudder@main, emberstore@main) stay at the locked commit until
 `just update-deps` (or `lockstep update <Name>`) moves them; commit the
 rewritten lock.
+
+For now `just install` on macOS installs a build that counts which lines of
+Grazer's own code run, to find features nobody uses; `just coverage-report`
+lists the code that never ran and `just install-without-coverage` installs the
+normal build.
