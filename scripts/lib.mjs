@@ -96,16 +96,36 @@ export function buildTarget(buildDirectory, target) {
   });
 }
 
+// passkeySigning is { teamId, codesignIdentity, provisioningProfile } to sign
+// with the passkey entitlement (cmake/GrazerPasskeys.cmake), or null for the
+// ad-hoc build. Left out, the build directory keeps whichever it was configured
+// with last, so a plain coverage build doesn't undo an install's choice.
+function describePasskeySigningArguments(passkeySigning) {
+  if (passkeySigning === undefined)
+    return [];
+
+  if (passkeySigning === null)
+    return ['-DGRAZER_PASSKEYS=OFF'];
+
+  return [
+    '-DGRAZER_PASSKEYS=ON',
+    `-DGRAZER_TEAM_ID=${passkeySigning.teamId}`,
+    `-DGRAZER_CODESIGN_IDENTITY=${passkeySigning.codesignIdentity}`,
+    `-DGRAZER_PROVISIONING_PROFILE=${passkeySigning.provisioningProfile}`,
+  ];
+}
+
 // Configure (locked deps) + build Release Grazer, in build-coverage with line
 // coverage counters (needs clang) or in build-release without. Returns the build
 // directory.
-export async function buildReleaseGrazer({ withLineCoverage }) {
+export async function buildReleaseGrazer({ withLineCoverage, passkeySigning }) {
   const buildDirectory = withLineCoverage ? LINE_COVERAGE_BUILD_DIR : RELEASE_BUILD_DIR;
   const lineCoverageArguments = withLineCoverage ? ['-DPOND_LINE_COVERAGE=ON'] : [];
 
   await run('cmake', [
     '-G', 'Ninja', '-B', buildDirectory, '-DCMAKE_BUILD_TYPE=Release',
-    ...lineCoverageArguments, ...lockstepSourceArgs(),
+    ...lineCoverageArguments, ...describePasskeySigningArguments(passkeySigning),
+    ...lockstepSourceArgs(),
   ]);
 
   await buildTarget(buildDirectory, 'Grazer');

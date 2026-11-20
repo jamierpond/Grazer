@@ -23,7 +23,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, rm, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { buildReleaseGrazer, main, run } from './lib.mjs';
 
 const LOCAL_PREFIX = join(homedir(), '.local');
@@ -150,19 +150,59 @@ const keepRunning = process.argv.includes('--keep-running');
 // which of its lines run (just coverage-report).
 const withLineCoverage = process.argv.includes('--line-coverage');
 
+const PASSKEY_SIGNING_ENVIRONMENT_VARIABLES = {
+  teamId: 'GRAZER_TEAM_ID',
+  codesignIdentity: 'GRAZER_CODESIGN_IDENTITY',
+  provisioningProfile: 'GRAZER_PROVISIONING_PROFILE',
+};
+
+// All three variables set: sign with the passkey entitlement and profile.
+// None set: null, the ad-hoc build. Some set: an error naming the rest.
+function readPasskeySigningSettingsFromEnvironment() {
+  const settings = Object.fromEntries(
+    Object.entries(PASSKEY_SIGNING_ENVIRONMENT_VARIABLES)
+      .map(([setting, variable]) => [setting, process.env[variable] ?? '']));
+
+  const missingVariables = Object.entries(PASSKEY_SIGNING_ENVIRONMENT_VARIABLES)
+    .filter(([setting]) => settings[setting] === '')
+    .map(([, variable]) => variable);
+
+  if (missingVariables.length === Object.keys(settings).length)
+    return null;
+
+  if (missingVariables.length > 0)
+    throw new Error(`Passkey signing needs all of ${Object.values(PASSKEY_SIGNING_ENVIRONMENT_VARIABLES).join(', ')}; `
+      + `missing ${missingVariables.join(', ')}`);
+
+  return { ...settings, provisioningProfile: resolve(settings.provisioningProfile) };
+}
+
+// The linker's ad-hoc signature covers the executable only, so the ad-hoc build
+// gets the whole bundle (Info.plist, icon) sealed here. A passkey build was
+// already signed whole by CMake, and re-signing ad-hoc would wipe that.
+async function signAndVerifyStagedBundle(passkeySigning) {
+  if (passkeySigning === null)
+    await run('codesign', ['--force', '--sign', '-', STAGING]);
+
+  await run('codesign', ['--verify', '--deep', '--strict', STAGING]);
+}
+
+function describeInstalledSignature(passkeySigning) {
+  if (passkeySigning === null)
+    return 'ad-hoc (no passkeys; set GRAZER_TEAM_ID, GRAZER_CODESIGN_IDENTITY and GRAZER_PROVISIONING_PROFILE for them)';
+
+  return `"${passkeySigning.codesignIdentity}" with the passkey entitlement and profile`;
+}
+
 await main(async () => {
-  const buildDirectory = await buildReleaseGrazer({ withLineCoverage });
+  const passkeySigning = readPasskeySigningSettingsFromEnvironment();
+  const buildDirectory = await buildReleaseGrazer({ withLineCoverage, passkeySigning });
 
   await mkdir(INSTALL_DIR, { recursive: true });
   await mkdir(COMMAND_DIR, { recursive: true });
   await rm(STAGING, { recursive: true, force: true });
   await run('ditto', [join(buildDirectory, 'Grazer.app'), STAGING]);
-
-  // The linker's ad-hoc signature covers the executable only; seal the whole
-  // bundle (Info.plist, icon) so it verifies and carries the bundle id. Still
-  // ad-hoc: no identity, no keychain.
-  await run('codesign', ['--force', '--sign', '-', STAGING]);
-  await run('codesign', ['--verify', '--deep', '--strict', STAGING]);
+  await signAndVerifyStagedBundle(passkeySigning);
 
   await removeOldName();
 
@@ -200,4 +240,5 @@ await main(async () => {
     await run('open', [APP]);
 
   console.log(`Installed ${APP} (${bundleId(APP)})`);
+  console.log(`Signature: ${describeInstalledSignature(passkeySigning)}`);
 });

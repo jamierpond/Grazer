@@ -8,10 +8,13 @@
 # so this signs Grazer with a real identity, the entitlements in
 # Grazer.entitlements.in and the profile at Contents/embedded.provisionprofile.
 #
-#   cmake -B build -DGRAZER_PASSKEYS=ON \
-#       -DGRAZER_TEAM_ID=<team id> \
-#       -DGRAZER_CODESIGN_IDENTITY="Developer ID Application: <name> (<team id>)" \
-#       -DGRAZER_PROVISIONING_PROFILE=/path/to/Grazer_Developer_ID.provisionprofile
+#   GRAZER_TEAM_ID=<team id> \
+#   GRAZER_CODESIGN_IDENTITY="Developer ID Application: <name> (<team id>)" \
+#   GRAZER_PROVISIONING_PROFILE=/path/to/Grazer_Developer_ID.provisionprofile \
+#       just install
+#
+# scripts/install-macos.mjs turns those into -DGRAZER_PASSKEYS=ON and the three
+# cache values below, and configures OFF when none of them is set.
 #
 # The team and identity have no defaults: which developer account signs
 # Grazer is always an explicit choice.
