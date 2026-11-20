@@ -1,5 +1,6 @@
 #pragma once
 
+#include <GrazerPalette/Stamp.h>
 #include <Miro/Reflect.h>
 #include <emberstore/Emberstore.h>
 
@@ -9,16 +10,6 @@
 
 namespace grazer
 {
-struct Stamp
-{
-    std::int64_t at = 0;
-
-    // Uses so far, each 1, halving every frecencysearch::usageHalfLifeMs, as of `at`.
-    double usage = 0;
-
-    MIRO_REFLECT(at, usage)
-};
-
 // Recency and decayed use counts for palette ordering, keyed by normalized URL. Written on
 // every real use (palette pick, tab cycle, active-tab navigation), so give it
 // an Atomic (not Durable) database -- losing the last stamps to a power cut

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <GrazerPalette/Place.h>
 #include <Miro/Reflect.h>
 #include <emberstore/Emberstore.h>
 
@@ -9,14 +10,6 @@
 
 namespace grazer
 {
-struct Place
-{
-    std::string title;
-    std::string url;
-
-    MIRO_REFLECT(title, url)
-};
-
 struct PlacesFile
 {
     std::vector<Place> places;

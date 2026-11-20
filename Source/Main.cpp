@@ -10,7 +10,7 @@
 #include "OpenUrls.h"
 #include "PageScript.h"
 #include "PaletteView.h"
-#include "Palette.h"
+#include <GrazerPalette/Palette.h>
 #include "Places.h"
 #include "ReloadFromOrigin.h"
 #include "RudderContexts.h"
@@ -19,8 +19,8 @@
 #include "Sites.h"
 #include "TabExpiry.h"
 #include "TabMatch.h"
-#include "Types.h"
-#include "Url.h"
+#include <GrazerPalette/Types.h>
+#include <GrazerPalette/Url.h>
 
 #include <eacp/Core/Platform/Platform.h>
 #include <eacp/Core/Utils/Logging.h>
@@ -151,7 +151,6 @@ struct Browser
     void setupControl();
     void setupRudder();
     void scheduleRudderPush();
-    static std::optional<std::int64_t> rudderTabId(const std::string& contextId);
     void pushTabsToRudder();
     Control::TabList buildTabList();
     std::pair<BrowserWindow*, Tab*> findTab(std::int64_t id);
@@ -1502,8 +1501,18 @@ void Browser::setupRudder()
 
         if (auto url = parseRudderPageContextId(contextId))
             openUrlFromControl(*url);
-        else if (auto id = rudderTabId(contextId))
+        else if (auto id = parseRudderTabId(contextId))
             focusTabById(*id);
+    };
+
+    rudder->onRankingMaterialsRequest = [this]
+    {
+        auto tabs = std::vector<PaletteTab> {};
+
+        for (auto& window: windows)
+            std::ranges::move(window->view.listPaletteTabs(), std::back_inserter(tabs));
+
+        return std::optional {collectRudderRankingMaterials(std::move(tabs), pushedToRudder, {mru, history, places})};
     };
 
     // Rudder previewing a tab: show it, but never activate Grazer or raise
@@ -1512,7 +1521,7 @@ void Browser::setupRudder()
     rudder->onPreview = [this](const std::string& contextId)
     {
         logEvent("rudder.preview", {{"context", contextId}});
-        if (auto id = rudderTabId(contextId))
+        if (auto id = parseRudderTabId(contextId))
             if (auto [window, tab] = findTab(*id); tab != nullptr)
                 window->view.showTab(*tab);
     };
@@ -1534,18 +1543,6 @@ void Browser::scheduleRudderPush()
         });
 }
 
-std::optional<std::int64_t> Browser::rudderTabId(const std::string& contextId)
-{
-    try
-    {
-        return std::stoll(contextId);
-    }
-    catch (const std::exception&)
-    {
-        return std::nullopt;
-    }
-}
-
 void Browser::pushTabsToRudder()
 {
     if (!rudder)
@@ -1561,7 +1558,7 @@ void Browser::pushTabsToRudder()
                             tab->url,
                             window.get() == shownWindow && tab.get() == window->view.activeTab});
 
-    auto contexts = buildRudderContexts(tabs, readRecordedPageUse(mru, history));
+    auto contexts = buildRudderContexts(tabs);
 
     if (contexts == pushedToRudder)
         return;

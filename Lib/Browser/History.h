@@ -1,5 +1,6 @@
 #pragma once
 
+#include <GrazerPalette/HistoryEntry.h>
 #include <Miro/Reflect.h>
 #include <emberstore/Emberstore.h>
 
@@ -9,16 +10,6 @@
 
 namespace grazer
 {
-struct HistoryEntry
-{
-    std::string url;
-    std::string title;
-    std::int64_t lastVisit = 0;
-    std::int64_t visits = 0;
-
-    MIRO_REFLECT(url, title, lastVisit, visits)
-};
-
 // The global visit log, keyed by normalized URL; it feeds the palette's
 // suggestions when a query is typed. Like MruStore it's written on every
 // navigation, so give it an Atomic database.

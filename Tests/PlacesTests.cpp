@@ -1,7 +1,7 @@
 #include "TestSupport.h"
 
 #include <Places.h>
-#include <Url.h>
+#include <GrazerPalette/Url.h>
 
 #include <Miro/Reflect.h>
 #include <NanoTest/NanoTest.h>

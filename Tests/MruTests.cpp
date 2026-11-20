@@ -1,7 +1,7 @@
 #include "TestSupport.h"
 
 #include <Mru.h>
-#include <Url.h>
+#include <GrazerPalette/Url.h>
 
 #include <FrecencySearch/LearnedPicks.h>
 

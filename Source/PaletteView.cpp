@@ -1,5 +1,5 @@
 #include "PaletteView.h"
-#include "Url.h"
+#include <GrazerPalette/Url.h>
 
 #include <SessionLog/EventLine.h>
 

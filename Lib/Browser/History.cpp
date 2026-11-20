@@ -1,5 +1,5 @@
 #include "History.h"
-#include "Url.h"
+#include <GrazerPalette/Url.h>
 
 #include <algorithm>
 #include <array>

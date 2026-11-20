@@ -1,7 +1,7 @@
 #include "Mru.h"
-#include "Url.h"
+#include <GrazerPalette/Url.h>
 
-#include <FrecencySearch/LearnedPicks.h>
+#include <GrazerPalette/RankingMaterials.h>
 
 #include <algorithm>
 #include <chrono>
@@ -27,7 +27,7 @@ void MruStore::touch(const std::string& normalizedUrl, std::int64_t atMs)
 double MruStore::usage(const std::string& normalizedUrl, std::int64_t atMs)
 {
     if (auto stamp = stamps.get(normalizedUrl))
-        return frecencysearch::calculateDecayedUsage(stamp->usage, stamp->at, atMs);
+        return calculateStampUsage(*stamp, atMs);
 
     return 0;
 }
@@ -39,8 +39,7 @@ std::unordered_map<std::string, double> MruStore::listUsage(std::int64_t atMs)
     auto values = stamps.values();
 
     for (auto index = std::size_t {0}; index < ids.size(); ++index)
-        usages[ids[index]] = frecencysearch::calculateDecayedUsage(
-            values[index].usage, values[index].at, atMs);
+        usages[ids[index]] = calculateStampUsage(values[index], atMs);
 
     return usages;
 }

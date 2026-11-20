@@ -71,16 +71,16 @@ set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
 # so only Grazer's code is counted.
 pond_add_line_coverage_counters()
 
-# Grazer's browser logic (URL/omnibox parsing, places, history, session,
-# palette ranking) lives in a plain static library so it stays unit-testable
-# without the app shell. Types.h (the palette's row model) is shared with the
-# app, hence Source on the include path.
+# Grazer's browser logic (places, history, session, tab expiry) lives in a
+# plain static library so it stays unit-testable without the app shell. The
+# palette's ordering and the URL rules are PondDev's GrazerPalette, which
+# Rudder runs too. Source is on the include path for the app headers the tests
+# use (PageScript.h).
 add_library(GrazerBrowser STATIC
         Lib/Browser/Download.cpp
         Lib/Browser/ErrorPage.cpp
         Lib/Browser/History.cpp
         Lib/Browser/Mru.cpp
-        Lib/Browser/Palette.cpp
         Lib/Browser/PaletteKeys.cpp
         Lib/Browser/Places.cpp
         Lib/Browser/RudderContexts.cpp
@@ -88,11 +88,10 @@ add_library(GrazerBrowser STATIC
         Lib/Browser/Settings.cpp
         Lib/Browser/Sites.cpp
         Lib/Browser/TabExpiry.cpp
-        Lib/Browser/TabMatch.cpp
-        Lib/Browser/Url.cpp)
+        Lib/Browser/TabMatch.cpp)
 
 target_include_directories(GrazerBrowser PUBLIC Lib/Browser Source)
-target_link_libraries(GrazerBrowser PUBLIC emberstore FrecencySearch SearchKeys SessionLog RudderProtocol)
+target_link_libraries(GrazerBrowser PUBLIC emberstore FrecencySearch GrazerPalette SearchKeys SessionLog RudderProtocol)
 
 # eacp's bundle plist template plus http/https URL types, so Grazer can be
 # picked as the default browser and gets the URLs macOS opens with it.

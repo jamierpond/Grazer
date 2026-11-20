@@ -2,11 +2,12 @@
 
 #include "History.h"
 #include "Mru.h"
+#include "Places.h"
 
+#include <GrazerPalette/RankingMaterials.h>
 #include <RudderProtocol.h>
 
 #include <cstdint>
-#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -24,24 +25,35 @@ struct RudderTab
     bool focused = false;
 };
 
-// What Grazer recorded about the user's use of each page: the recency
-// stamps and decayed use counts by normalizeURL, the history by pageKey.
-struct RecordedPageUse
+// One context per tab.
+std::vector<rudder::protocol::Context> buildRudderContexts(const std::vector<RudderTab>& tabs);
+
+// The stores Grazer's palette ordering reads.
+struct PaletteStores
 {
-    std::map<std::string, Stamp> stampsByNormalizedUrl;
-    std::map<std::string, HistoryEntry> historyByPageKey;
+    MruStore& mru;
+    HistoryStore& history;
+    PlacesStore& places;
 };
 
-RecordedPageUse readRecordedPageUse(MruStore& mru, HistoryStore& history);
+// Everything Grazer's palette ordering reads, for Rudder: every window's
+// `tabs` as its palette lists them, with the tab pushed to Rudder as focused
+// as the current one, the starred places, every recency stamp and the
+// history in the order the store lists it.
+PaletteRankingMaterials collectPaletteRankingMaterials(std::vector<PaletteTab> tabs,
+                                                       const std::vector<rudder::protocol::Context>& pushed,
+                                                       const PaletteStores& stores);
 
-// One context per tab, then one per used page (an MruStore stamp) that no tab
-// shows, pushed with open=false: picking it in Rudder opens it in a new tab.
-// Each carries what Grazer recorded about its use as `usage`, left out where
-// Grazer recorded nothing.
-std::vector<rudder::protocol::Context> buildRudderContexts(const std::vector<RudderTab>& tabs,
-                                                           const RecordedPageUse& recorded);
+// The same, as Rudder's protocol answers a ranking materials request.
+rudder::protocol::RankingMaterials collectRudderRankingMaterials(
+    std::vector<PaletteTab> tabs,
+    const std::vector<rudder::protocol::Context>& pushed,
+    const PaletteStores& stores);
 
-// The url an unopened page's context id ("url:<url>") opens; nothing for a
-// tab's id.
+// The tab a context id names; nothing for a page's id.
+std::optional<std::int64_t> parseRudderTabId(const std::string& id);
+
+// The url a page row Rudder lists from the materials ("url:<url>") opens;
+// nothing for a tab's id.
 std::optional<std::string> parseRudderPageContextId(const std::string& id);
 } // namespace grazer

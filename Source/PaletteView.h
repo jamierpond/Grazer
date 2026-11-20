@@ -1,7 +1,7 @@
 #pragma once
 
 #include "PaletteKeys.h"
-#include "Types.h"
+#include <GrazerPalette/Types.h>
 
 #include <eacp/UI/UI.h>
 

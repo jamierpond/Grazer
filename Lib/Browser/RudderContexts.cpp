@@ -1,9 +1,8 @@
 #include "RudderContexts.h"
-#include "Url.h"
 
-#include <FrecencySearch/LearnedPicks.h>
+#include <Miro/Reflection/Serialize.h>
 
-#include <unordered_set>
+#include <algorithm>
 
 namespace grazer
 {
@@ -11,60 +10,19 @@ namespace
 {
 constexpr auto pageContextPrefix = std::string_view {"url:"};
 
-template <typename Value>
-std::map<std::string, Value> readCollection(emberstore::Collection<Value>& collection)
+std::map<std::string, Stamp> readStamps(MruStore& mru)
 {
-    auto byId = std::map<std::string, Value> {};
-    auto ids = collection.ids();
-    auto values = collection.values();
+    auto stamps = std::map<std::string, Stamp> {};
+    auto ids = mru.stamps.ids();
+    auto values = mru.stamps.values();
 
     for (auto index = std::size_t {0}; index < ids.size() && index < values.size(); ++index)
-        byId[ids[index]] = values[index];
+        stamps[ids[index]] = values[index];
 
-    return byId;
+    return stamps;
 }
 
-template <typename Value>
-const Value* findRecorded(const std::map<std::string, Value>& byKey, const std::string& key)
-{
-    auto found = byKey.find(key);
-    return found == byKey.end() ? nullptr : &found->second;
-}
-
-void addMruStamp(rudder::protocol::ContextUsage& usage, const Stamp& stamp)
-{
-    usage.lastUsedAtMs = stamp.at;
-    usage.useCount =
-        rudder::protocol::DecayingUseCount {stamp.usage, stamp.at, frecencysearch::usageHalfLifeMs};
-}
-
-void addHistory(rudder::protocol::ContextUsage& usage, const HistoryEntry& entry)
-{
-    usage.lastVisitAtMs = entry.lastVisit;
-    usage.visitCount = entry.visits;
-}
-
-Miro::Omittable<rudder::protocol::ContextUsage> describeUsage(const std::string& url,
-                                                              const RecordedPageUse& recorded)
-{
-    auto* stamp = findRecorded(recorded.stampsByNormalizedUrl, normalizeURL(url));
-    auto* history = findRecorded(recorded.historyByPageKey, pageKey(url));
-
-    if (stamp == nullptr && history == nullptr)
-        return {};
-
-    auto usage = rudder::protocol::ContextUsage {};
-
-    if (stamp != nullptr)
-        addMruStamp(usage, *stamp);
-
-    if (history != nullptr)
-        addHistory(usage, *history);
-
-    return usage;
-}
-
-rudder::protocol::Context createTabContext(const RudderTab& tab, const RecordedPageUse& recorded)
+rudder::protocol::Context createTabContext(const RudderTab& tab)
 {
     auto context = rudder::protocol::Context {};
     context.id = std::to_string(tab.id);
@@ -72,53 +30,51 @@ rudder::protocol::Context createTabContext(const RudderTab& tab, const RecordedP
     context.subtitle = tab.url;
     context.url = tab.url;
     context.focused = tab.focused;
-    context.usage = describeUsage(tab.url, recorded);
-    return context;
-}
-
-// History keeps the url as it was visited and the page's title; a page used
-// but never recorded there only has its normalized key, which navigationURL
-// makes openable.
-rudder::protocol::Context createUnopenedPageContext(const std::string& normalizedUrl,
-                                                    const RecordedPageUse& recorded)
-{
-    auto* history = findRecorded(recorded.historyByPageKey, pageKey(normalizedUrl));
-    auto hasTitle = history != nullptr && !history->title.empty();
-    auto url = history != nullptr ? history->url : navigationURL(normalizedUrl);
-
-    auto context = rudder::protocol::Context {};
-    context.id = std::string {pageContextPrefix} + url;
-    context.title = hasTitle ? history->title : normalizedUrl;
-    context.subtitle = url;
-    context.url = url;
-    context.open = false;
-    context.usage = describeUsage(url, recorded);
     return context;
 }
 } // namespace
 
-RecordedPageUse readRecordedPageUse(MruStore& mru, HistoryStore& history)
-{
-    return {readCollection(mru.stamps), readCollection(history.entries)};
-}
-
-std::vector<rudder::protocol::Context> buildRudderContexts(const std::vector<RudderTab>& tabs,
-                                                           const RecordedPageUse& recorded)
+std::vector<rudder::protocol::Context> buildRudderContexts(const std::vector<RudderTab>& tabs)
 {
     auto contexts = std::vector<rudder::protocol::Context> {};
-    auto shownInATab = std::unordered_set<std::string> {};
 
     for (auto& tab: tabs)
-    {
-        shownInATab.insert(normalizeURL(tab.url));
-        contexts.push_back(createTabContext(tab, recorded));
-    }
-
-    for (auto& [normalizedUrl, stamp]: recorded.stampsByNormalizedUrl)
-        if (!shownInATab.contains(normalizedUrl))
-            contexts.push_back(createUnopenedPageContext(normalizedUrl, recorded));
+        contexts.push_back(createTabContext(tab));
 
     return contexts;
+}
+
+PaletteRankingMaterials collectPaletteRankingMaterials(std::vector<PaletteTab> tabs,
+                                                       const std::vector<rudder::protocol::Context>& pushed,
+                                                       const PaletteStores& stores)
+{
+    for (auto& tab: tabs)
+        tab.isCurrent = std::ranges::any_of(pushed,
+                                            [&tab](const rudder::protocol::Context& context)
+                                            { return context.focused && context.id == std::to_string(tab.tabId); });
+
+    return {std::move(tabs), stores.places.all(), readStamps(stores.mru), stores.history.all()};
+}
+
+rudder::protocol::RankingMaterials collectRudderRankingMaterials(
+    std::vector<PaletteTab> tabs,
+    const std::vector<rudder::protocol::Context>& pushed,
+    const PaletteStores& stores)
+{
+    auto materials = collectPaletteRankingMaterials(std::move(tabs), pushed, stores);
+    return {paletteRankingMaterialsName, Miro::toJSON(materials)};
+}
+
+std::optional<std::int64_t> parseRudderTabId(const std::string& id)
+{
+    try
+    {
+        return std::stoll(id);
+    }
+    catch (const std::exception&)
+    {
+        return std::nullopt;
+    }
 }
 
 std::optional<std::string> parseRudderPageContextId(const std::string& id)
