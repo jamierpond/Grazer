@@ -252,8 +252,7 @@ std::string answerPasskeyAssertionRequest(const PasskeyAssertionRequest& request
     auto authenticatorData = buildAssertionAuthenticatorData(*relyingPartyId);
     auto bytesToSign =
         buildBytesToSignForAssertion(authenticatorData, clientDataJSON);
-    auto signature =
-        keyStore.signWithCredential(credential.credentialId, bytesToSign);
+    auto signature = keyStore.signWithCredential(credential, bytesToSign);
 
     if (!signature)
         return buildPasskeyErrorReply(request.requestId, makeDeclinedError());

@@ -86,6 +86,7 @@ add_library(GrazerBrowser STATIC
         Lib/Browser/PaletteKeys.cpp
         Lib/Browser/Passkey.cpp
         Lib/Browser/PasskeyAuthenticatorData.cpp
+        Lib/Browser/PasskeyCredentialMetadata.cpp
         Lib/Browser/PasskeyReply.cpp
         Lib/Browser/Places.cpp
         Lib/Browser/RudderContexts.cpp
@@ -126,7 +127,8 @@ target_link_libraries(Grazer PRIVATE GrazerBrowser eacp-webview eacp-network-rpc
 # The per-platform halves of the app, each beside the shared header it
 # implements: the menu bar (AppMenu), what makes a web view a browser's
 # (BrowserEngine), a terminal for the CLI modes (Console), and the URLs the OS
-# hands Grazer -- kAEGetURL on macOS, the command line on Windows (OpenUrls).
+# hands Grazer -- kAEGetURL on macOS, the command line on Windows (OpenUrls),
+# and where passkeys are kept -- the Secure Enclave on macOS (PlatformPasskeyStore).
 # Reloading a page past the cache is macOS-only (ReloadFromOrigin).
 if (APPLE)
     enable_language(OBJCXX)
@@ -136,13 +138,19 @@ if (APPLE)
             Source/Console-macOS.mm
             Source/DefaultBrowser-macOS.mm
             Source/OpenUrls-macOS.mm
+            Source/PlatformPasskeyStore-macOS.mm
             Source/ReloadFromOrigin-macOS.mm)
+    target_link_libraries(Grazer PRIVATE
+            "-framework CryptoTokenKit"
+            "-framework LocalAuthentication"
+            "-framework Security")
 elseif (WIN32)
     target_sources(Grazer PRIVATE
             Source/AppMenu-Windows.cpp
             Source/BrowserEngine-Windows.cpp
             Source/Console-Windows.cpp
-            Source/OpenUrls-Windows.cpp)
+            Source/OpenUrls-Windows.cpp
+            Source/PlatformPasskeyStore-Windows.cpp)
 endif ()
 
 # The at-rest icon Finder, the Dock and Explorer draw. Assets/Icon is made by

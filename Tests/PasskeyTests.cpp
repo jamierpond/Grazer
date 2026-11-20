@@ -118,10 +118,10 @@ public:
     }
 
     std::optional<PasskeyBytes>
-        signWithCredential(const PasskeyBytes& credentialId,
+        signWithCredential(const PasskeyCredential& credential,
                            const PasskeyBytes& bytesToSign) override
     {
-        signedCredentialId = credentialId;
+        signedCredentialId = credential.credentialId;
         signedBytes = bytesToSign;
         return PasskeyBytes {0x30, 0x00};
     }
@@ -535,4 +535,40 @@ auto tErrorReplyNamesTheDomException =
     check(reply["requestId"].asInteger() == requestId);
     check(reply["error"]["name"].asString() == "SecurityError");
     check(reply["error"]["message"].asString() == "wrong site");
+};
+
+auto tOriginOmitsTheDefaultPort =
+    test("Passkey/an origin names its port only when it is not the default") = []
+{
+    constexpr auto defaultPort = 0;
+    constexpr auto httpsPort = 443;
+    constexpr auto developmentPort = 5173;
+
+    check(serializeOrigin("https", "example.com", defaultPort) == exampleOrigin);
+    check(serializeOrigin("https", "example.com", httpsPort) == exampleOrigin);
+    check(serializeOrigin("HTTPS", "Example.COM", defaultPort) == exampleOrigin);
+    check(serializeOrigin("http", "localhost", developmentPort)
+          == "http://localhost:5173");
+};
+
+auto tURLOnTheSameOriginMatches =
+    test("Passkey/a URL on the page's origin still matches it") = []
+{
+    check(isURLOnOrigin("https://example.com/login?next=/#top", exampleOrigin));
+    check(isURLOnOrigin("https://example.com", exampleOrigin));
+    check(isURLOnOrigin("https://user@example.com:443/", exampleOrigin));
+    check(isURLOnOrigin("http://localhost:5173/app", "http://localhost:5173"));
+    check(isURLOnOrigin("https://[::1]:8443/", "https://[::1]:8443"));
+};
+
+auto tURLOnAnotherOriginDoesNotMatch =
+    test("Passkey/a URL on another host, scheme or port does not match") = []
+{
+    check(!isURLOnOrigin("https://evil.com/example.com", exampleOrigin));
+    check(!isURLOnOrigin("https://example.com.evil.com/", exampleOrigin));
+    check(!isURLOnOrigin("http://example.com/", exampleOrigin));
+    check(!isURLOnOrigin("https://example.com:8443/", exampleOrigin));
+    check(!isURLOnOrigin("https://example.com@evil.com/", exampleOrigin));
+    check(!isURLOnOrigin("about:blank", exampleOrigin));
+    check(!isURLOnOrigin("https://example.com:notaport/", exampleOrigin));
 };

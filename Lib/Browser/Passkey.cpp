@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
+#include <charconv>
 #include <string_view>
 
 namespace grazer
@@ -120,6 +122,19 @@ constexpr auto secureScheme = std::string_view {"https"};
 constexpr auto plainScheme = std::string_view {"http"};
 constexpr auto plainSchemeHostAllowed = std::string_view {"localhost"};
 
+struct SchemeDefaultPort
+{
+    std::string_view scheme;
+    int port;
+};
+
+constexpr auto schemeDefaultPorts = std::array {
+    SchemeDefaultPort {secureScheme, 443},
+    SchemeDefaultPort {plainScheme, 80},
+};
+
+constexpr auto defaultPort = 0;
+
 std::vector<PasskeyBytes>
     decodeCredentialIds(const std::vector<WireCredentialDescriptor>& descriptors)
 {
@@ -183,6 +198,89 @@ std::optional<ParsedOrigin> parseSecureOrigin(const std::string& origin)
         return std::nullopt;
 
     return parsed;
+}
+
+bool isDefaultPortOfScheme(int port, const std::string& scheme)
+{
+    if (port == defaultPort)
+        return true;
+
+    auto isEntryForPort = [&](const SchemeDefaultPort& entry)
+    { return entry.scheme == scheme && entry.port == port; };
+
+    return std::ranges::any_of(schemeDefaultPorts, isEntryForPort);
+}
+
+std::string toLowerCase(std::string text)
+{
+    auto lower = [](unsigned char character)
+    {
+        auto lowered = std::tolower(character);
+        return static_cast<char>(lowered);
+    };
+
+    std::ranges::transform(text, text.begin(), lower);
+    return text;
+}
+
+struct URLAuthority
+{
+    std::string host;
+    int port = defaultPort;
+};
+
+std::optional<int> parsePort(std::string_view text)
+{
+    auto port = defaultPort;
+    auto end = text.data() + text.size();
+    auto [parsedEnd, error] = std::from_chars(text.data(), end, port);
+
+    if (error != std::errc {} || parsedEnd != end)
+        return std::nullopt;
+
+    return port;
+}
+
+// "user@host:port" or "[::1]:port" as host and port; the user part is dropped.
+std::optional<URLAuthority> parseAuthority(std::string_view authority)
+{
+    auto userEnd = authority.rfind('@');
+
+    if (userEnd != std::string_view::npos)
+        authority.remove_prefix(userEnd + 1);
+
+    auto ipv6End = authority.rfind(']');
+    auto searchFrom = ipv6End == std::string_view::npos ? 0 : ipv6End;
+    auto portSeparator = authority.find(':', searchFrom);
+
+    if (portSeparator == std::string_view::npos)
+        return URLAuthority {std::string(authority), defaultPort};
+
+    auto port = parsePort(authority.substr(portSeparator + 1));
+
+    if (!port)
+        return std::nullopt;
+
+    return URLAuthority {std::string(authority.substr(0, portSeparator)), *port};
+}
+
+std::optional<std::string> findOriginOfURL(const std::string& url)
+{
+    auto separator = url.find(schemeSeparator);
+
+    if (separator == std::string::npos)
+        return std::nullopt;
+
+    auto authorityStart = separator + schemeSeparator.size();
+    auto authorityEnd = url.find_first_of("/?#", authorityStart);
+    auto authority = std::string_view(url).substr(authorityStart,
+                                                  authorityEnd - authorityStart);
+    auto parsed = parseAuthority(authority);
+
+    if (!parsed || parsed->host.empty())
+        return std::nullopt;
+
+    return serializeOrigin(url.substr(0, separator), parsed->host, parsed->port);
 }
 
 bool isIPAddressHost(const std::string& host)
@@ -303,5 +401,21 @@ bool isES256Offered(const PasskeyCreationRequest& request)
 
     auto found = std::ranges::find(request.algorithms, coseAlgorithmES256);
     return found != request.algorithms.end();
+}
+
+std::string serializeOrigin(const std::string& scheme, const std::string& host, int port)
+{
+    auto lowerScheme = toLowerCase(scheme);
+    auto origin = lowerScheme + std::string(schemeSeparator) + toLowerCase(host);
+
+    if (isDefaultPortOfScheme(port, lowerScheme))
+        return origin;
+
+    return origin + ":" + std::to_string(port);
+}
+
+bool isURLOnOrigin(const std::string& url, const std::string& origin)
+{
+    return findOriginOfURL(url) == origin;
 }
 } // namespace grazer

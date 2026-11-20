@@ -79,6 +79,12 @@ std::optional<std::string>
 
 bool isES256Offered(const PasskeyCreationRequest& request);
 
+// The origin as WebAuthn's clientDataJSON writes it: "https://host", with the
+// port only when it is not the scheme's default. A port of 0 means the default.
+std::string serializeOrigin(const std::string& scheme, const std::string& host, int port);
+
+bool isURLOnOrigin(const std::string& url, const std::string& origin);
+
 enum class PasskeyCeremony
 {
     creation,
@@ -120,6 +126,20 @@ struct CreatedPasskey
     PasskeyPublicKey publicKey;
 };
 
+// The account as the user knows it: "Jamie (jamie@example.com)".
+std::string describePasskeyAccount(const PasskeyUser& user);
+
+// What the Touch ID sheet says Grazer is trying to do, after "Grazer is trying to".
+std::string describePasskeyCreationReason(const std::string& relyingPartyId,
+                                          const PasskeyUser& user);
+std::string describePasskeySigningReason(const PasskeyCredential& credential);
+
+// A credential as the bytes stored on its key's keychain item, and back again;
+// nullopt for bytes Grazer did not write.
+PasskeyBytes encodePasskeyCredentialMetadata(const PasskeyCredential& credential);
+std::optional<PasskeyCredential>
+    decodePasskeyCredentialMetadata(const PasskeyBytes& metadata);
+
 class PasskeyKeyStore
 {
 public:
@@ -135,7 +155,7 @@ public:
     // An ES256 signature: ECDSA P-256 over SHA-256 of `bytesToSign`, DER-encoded.
     // Nullopt when the user declined or the credential is gone.
     virtual std::optional<PasskeyBytes>
-        signWithCredential(const PasskeyBytes& credentialId,
+        signWithCredential(const PasskeyCredential& credential,
                            const PasskeyBytes& bytesToSign) = 0;
 };
 
