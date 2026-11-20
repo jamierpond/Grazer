@@ -114,8 +114,8 @@
       "usesGitLfs": false
     },
     {
-      "commit": "685e0aad31f4ee2600ed2d126b39b03dcb016e7c",
-      "hash": "3387eb3d6a3be2ab7e8c47cf7227c1df34ab6e91b2940e0fa2ef38422719c8d4",
+      "commit": "32367058f219bbccc794f61ef8be3bc14e91d963",
+      "hash": "fba9b746095d15be539012b55c6adbbdac4e518b886379f7590c44da29dd778b",
       "kind": "git",
       "name": "Rudder",
       "patches": [],
@@ -258,6 +258,6 @@
       "usesGitLfs": false
     }
   ],
-  "root": "4488f841f3560d8b152173447c0b2486895fd8366f625a5b2a28b3bd8485e99a",
+  "root": "a4cd04f14e7c1fefed088c507c8ef31bf75b7ca4195413de28e24df3c6d1e595",
   "version": 1
 }

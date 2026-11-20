@@ -13,6 +13,7 @@
 #include "Palette.h"
 #include "Places.h"
 #include "ReloadFromOrigin.h"
+#include "RudderContexts.h"
 #include "Session.h"
 #include "Settings.h"
 #include "Sites.h"
@@ -1498,7 +1499,10 @@ void Browser::setupRudder()
     rudder->onActivate = [this](const std::string& contextId)
     {
         logEvent("rudder.pick", {{"context", contextId}});
-        if (auto id = rudderTabId(contextId))
+
+        if (auto url = parseRudderPageContextId(contextId))
+            openUrlFromControl(*url);
+        else if (auto id = rudderTabId(contextId))
             focusTabById(*id);
     };
 
@@ -1547,23 +1551,17 @@ void Browser::pushTabsToRudder()
     if (!rudder)
         return;
 
-    auto contexts = std::vector<rudder::protocol::Context> {};
+    auto tabs = std::vector<RudderTab> {};
     auto* shownWindow = frontWindow();
 
     for (auto& window: windows)
-    {
         for (auto& tab: window->view.tabs)
-        {
-            auto context = rudder::protocol::Context {};
-            context.id = std::to_string(tab->id);
-            context.title = tab->title.empty() ? tab->url : tab->title;
-            context.subtitle = tab->url;
-            context.url = tab->url;
-            context.focused =
-                window.get() == shownWindow && tab.get() == window->view.activeTab;
-            contexts.push_back(std::move(context));
-        }
-    }
+            tabs.push_back({tab->id,
+                            tab->title,
+                            tab->url,
+                            window.get() == shownWindow && tab.get() == window->view.activeTab});
+
+    auto contexts = buildRudderContexts(tabs, readRecordedPageUse(mru, history));
 
     if (contexts == pushedToRudder)
         return;
