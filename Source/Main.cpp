@@ -348,7 +348,7 @@ struct BrowserView final : View
 
     Tab& createTab(const std::string& url)
     {
-        auto& tab = tabs.createNew(nextTabId++, getWebViewOptions());
+        auto& tab = tabs.createNew(nextTabId++, getTabWebViewOptions());
         tab.view().addUserScript(vimiumScript(sites.excludedKeybindingsJSON()));
         PasskeyRequests::addPageScript(tab.view());
         tab.view().addScriptMessageHandler(
@@ -1172,6 +1172,16 @@ struct BrowserView final : View
         return options;
     }
 
+    // eacp drops page messages from origins a view has not been told to trust;
+    // a tab shows any site, and each one posts the vimium keys and URL changes.
+    static WebView::Options getTabWebViewOptions()
+    {
+        auto options = getWebViewOptions();
+        options.trustedOrigins = {everyOrigin};
+        return options;
+    }
+
+    static constexpr auto everyOrigin = "*";
     static constexpr auto homePage = homeURL;
     static constexpr auto homeTitle = "Home";
     static constexpr auto homePageHtml =
