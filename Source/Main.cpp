@@ -2238,6 +2238,10 @@ int main(int argc, char* argv[])
     if (auto handlerExitCode = pondcrashreports::runCrashHandlerIfRequested(argc, argv))
         return *handlerExitCode;
 
+    if (auto crashesExitCode = pondcrashreports::runCrashesCommandIfRequested(
+            {.appName = "Grazer"}, argc, argv))
+        return *crashesExitCode;
+
     Apps::setCommandLineArgs(argc, argv);
 
     // Every mode below but a plain launch prints, if only an error.

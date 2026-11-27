@@ -40,6 +40,8 @@ In the palette: `^J`/`^K` move, `Enter` goes, `Esc` returns to where you were,
   `--open-url github.com`.
 - `Grazer --snapshot out.png [--palette] <url>...` renders its own window to a
   PNG (how the screenshots above are made).
+- `Grazer crashes list` prints this machine's crash reports nobody has marked
+  fixed, grouped by where they happened, newest first.
 
 ## Build
 
